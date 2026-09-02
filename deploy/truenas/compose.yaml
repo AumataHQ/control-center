@@ -45,4 +45,4 @@ services:
       # the dashboard observes the pipeline, it does not write to it.
       - ${NEWSROOM_ROOT}/pipeline:/newsroom:ro
     ports:
-      - "${BIND_ADDRESS}:3000:3000"
+      - "${BIND_ADDRESS}:${CONTROL_CENTER_PORT:-3010}:3000"
