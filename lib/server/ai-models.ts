@@ -2,7 +2,7 @@ import "server-only";
 
 import { createHash } from "node:crypto";
 import type { AiKeyProvider, AiModelsResponse } from "@/lib/types";
-import { defaultAiModel, isLocalAiProvider, localAiBaseUrl } from "@/lib/ai-providers";
+import { aiEnvironmentGatewayUrl, defaultAiModel, gatewayBaseUrl, isGatewayAiProvider, isLocalAiProvider, localAiBaseUrl } from "@/lib/ai-providers";
 import { fetchAiModels } from "@/lib/ai-model-discovery";
 import { configuredAiApiKey, type StoredSettings } from "@/lib/server/settings";
 
@@ -16,7 +16,11 @@ export async function discoverAiModels(settings: StoredSettings, options: Discov
     provider, models: [], defaultModel: "", checkedAt: new Date().toISOString(), cached: false, localOnly: false,
   };
   const local = isLocalAiProvider(provider);
-  const baseUrl = local ? localAiBaseUrl(provider, options.baseUrl ?? settings.ai.localBaseUrls[provider]) : undefined;
+  const baseUrl = local
+    ? localAiBaseUrl(provider, options.baseUrl ?? settings.ai.localBaseUrls[provider])
+    : isGatewayAiProvider(provider)
+      ? gatewayBaseUrl(options.baseUrl ?? settings.ai.gatewayBaseUrl ?? aiEnvironmentGatewayUrl(process.env))
+      : undefined;
   // The selected provider can only use its own saved/environment key. A draft
   // key is never persisted by model discovery and never appears in its response.
   const apiKey = options.apiKey?.trim() || (options.useSavedKey === false ? "" : configuredAiApiKey(settings, provider));

@@ -27,8 +27,9 @@ function settingsFor(provider: AiKeyProvider, model = ""): StoredSettings {
     audience: { accounts: [] },
     ai: {
       provider, model,
-      apiKeys: { openai: "openai-test-key", anthropic: "anthropic-test-key", gemini: "gemini-test-key", xai: "xai-test-key", lmstudio: "", ollama: "" },
+      apiKeys: { openai: "openai-test-key", anthropic: "anthropic-test-key", gemini: "gemini-test-key", xai: "xai-test-key", gateway: "gateway-test-key", lmstudio: "", ollama: "" },
       localBaseUrls: { ...DEFAULT_LOCAL_AI_URLS },
+      gatewayBaseUrl: "",
     },
     dailyBrief: { sourceLabels: [], lookbackDays: 7, sections: { industry: 5, mentions: 5, newsletters: 5 } },
   };

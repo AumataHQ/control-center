@@ -1,6 +1,6 @@
 import type { AiKeyProvider } from "./types";
 import { aiProviderJson, AiProviderRequestError } from "./ai-provider-http";
-import { isLocalAiProvider, isRemoteAiModel, isValidAiModelId, localAiBaseUrl, normalizeAiModels } from "./ai-providers";
+import { gatewayBaseUrl, isGatewayAiProvider, isLocalAiProvider, isRemoteAiModel, isValidAiModelId, localAiBaseUrl, normalizeAiModels } from "./ai-providers";
 
 type DiscoveryConnection = {
   provider: AiKeyProvider;
@@ -28,6 +28,13 @@ export async function fetchAiModels(
     ...init,
     headers: { ...headers, ...init.headers },
   }, { fetcher, timeoutMs: 12_000 });
+
+  if (isGatewayAiProvider(provider)) {
+    // The gateway is OpenAI-compatible, so its route aliases arrive on the
+    // standard models endpoint. They are opaque names, not vendor model ids.
+    const root = gatewayBaseUrl(connection.baseUrl);
+    return normalizeAiModels(provider, await request(`${root}/models`));
+  }
 
   if (provider === "lmstudio") {
     const root = localAiBaseUrl(provider, connection.baseUrl);

@@ -30,7 +30,7 @@ import {
   MAX_MENTION_IDENTITIES,
 } from "@/lib/mention-work";
 import { isValidPublicProfileUrl } from "@/lib/public-metrics";
-import { AI_KEY_PROVIDERS, DEFAULT_LOCAL_AI_URLS, aiEnvironmentKey, cleanAiModelOverride, isAiKeyProvider, isLocalAiProvider, isValidAiModelId, localAiBaseUrl } from "@/lib/ai-providers";
+import { AI_KEY_PROVIDERS, DEFAULT_GATEWAY_URL, DEFAULT_LOCAL_AI_URLS, aiEnvironmentGatewayUrl, aiEnvironmentKey, cleanAiModelOverride, gatewayBaseUrl, isAiKeyProvider, isGatewayAiProvider, isLocalAiProvider, isValidAiModelId, localAiBaseUrl } from "@/lib/ai-providers";
 import { defaultBriefSections, normalizeBriefSections } from "@/lib/daily-brief-snapshot";
 
 type StoredAudienceAccount = Omit<
@@ -59,6 +59,7 @@ export type StoredSettings = {
     model: string;
     apiKeys: Record<AiKeyProvider, string>;
     localBaseUrls: Record<LocalAiProvider, string>;
+    gatewayBaseUrl: string;
   };
   dailyBrief: PublicSettings["dailyBrief"];
 };
@@ -93,8 +94,9 @@ const defaults: StoredSettings = {
   ai: {
     provider: "none",
     model: "",
-    apiKeys: { openai: "", anthropic: "", gemini: "", xai: "", lmstudio: "", ollama: "" },
+    apiKeys: { openai: "", anthropic: "", gemini: "", xai: "", gateway: "", lmstudio: "", ollama: "" },
     localBaseUrls: { ...DEFAULT_LOCAL_AI_URLS },
+    gatewayBaseUrl: DEFAULT_GATEWAY_URL,
   },
   dailyBrief: { sourceLabels: [], lookbackDays: 7, sections: defaultBriefSections },
 };
@@ -182,6 +184,7 @@ export async function readSettings(): Promise<StoredSettings> {
         model: isValidAiModelId(parsed.ai?.model) && parsed.ai.model !== "default" ? parsed.ai.model : "",
         apiKeys: { ...defaults.ai.apiKeys, ...parsed.ai?.apiKeys },
         localBaseUrls: { ...DEFAULT_LOCAL_AI_URLS, ...parsed.ai?.localBaseUrls },
+        gatewayBaseUrl: typeof parsed.ai?.gatewayBaseUrl === "string" ? parsed.ai.gatewayBaseUrl : DEFAULT_GATEWAY_URL,
       },
       dailyBrief: { ...defaults.dailyBrief, ...parsed.dailyBrief, sections: normalizeBriefSections(parsed.dailyBrief?.sections) },
     };
@@ -249,11 +252,13 @@ export function toPublicSettings(settings: StoredSettings): PublicSettings {
       provider: settings.ai.provider,
       model: settings.ai.model,
       localBaseUrls: { ...DEFAULT_LOCAL_AI_URLS, ...settings.ai.localBaseUrls },
+      gatewayBaseUrl: settings.ai.gatewayBaseUrl || aiEnvironmentGatewayUrl(process.env),
       keySet: {
         openai: Boolean(configuredAiApiKey(settings, "openai")),
         anthropic: Boolean(configuredAiApiKey(settings, "anthropic")),
         gemini: Boolean(configuredAiApiKey(settings, "gemini")),
         xai: Boolean(configuredAiApiKey(settings, "xai")),
+        gateway: Boolean(configuredAiApiKey(settings, "gateway")),
         lmstudio: Boolean(configuredAiApiKey(settings, "lmstudio")),
         ollama: Boolean(configuredAiApiKey(settings, "ollama")),
       },
@@ -262,6 +267,7 @@ export function toPublicSettings(settings: StoredSettings): PublicSettings {
         anthropic: aiKeySource("anthropic"),
         gemini: aiKeySource("gemini"),
         xai: aiKeySource("xai"),
+        gateway: aiKeySource("gateway"),
         lmstudio: aiKeySource("lmstudio"),
         ollama: aiKeySource("ollama"),
       },
@@ -342,6 +348,12 @@ export async function updateSettings(update: SettingsUpdate) {
         nextAiKeys[provider] = incoming;
       }
     }
+    const requestedGatewayBaseUrl = (update.ai?.gatewayBaseUrl ?? current.ai.gatewayBaseUrl)?.trim() || "";
+    const nextGatewayBaseUrl = requestedGatewayBaseUrl
+      ? gatewayBaseUrl(requestedGatewayBaseUrl)
+      : "";
+    if (update.ai !== undefined && isGatewayAiProvider(update.ai.provider) && !nextGatewayBaseUrl)
+      throw new Error("Add the address of your private model gateway before selecting it.");
     const cleanedAccounts = update.audience.accounts.map((account) => {
       const profileUrl = account.profileUrl?.trim() || "";
       if (
@@ -469,6 +481,9 @@ export async function updateSettings(update: SettingsUpdate) {
           lmstudio: localAiBaseUrl("lmstudio", update.ai?.localBaseUrls?.lmstudio ?? current.ai.localBaseUrls.lmstudio),
           ollama: localAiBaseUrl("ollama", update.ai?.localBaseUrls?.ollama ?? current.ai.localBaseUrls.ollama),
         },
+        // Validated only when a value is present, so selecting another provider
+        // never forces the operator to supply a gateway address.
+        gatewayBaseUrl: nextGatewayBaseUrl,
       },
       dailyBrief: {
         sections: normalizeBriefSections(update.dailyBrief?.sections ?? current.dailyBrief.sections),

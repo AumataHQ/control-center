@@ -4,9 +4,15 @@ export type IndustrySource = {
   url: string;
 };
 
-export type AiProvider = "none" | "openai" | "anthropic" | "gemini" | "xai" | "lmstudio" | "ollama";
+export type AiProvider = "none" | "openai" | "anthropic" | "gemini" | "xai" | "gateway" | "lmstudio" | "ollama";
 export type AiKeyProvider = Exclude<AiProvider, "none">;
 export type LocalAiProvider = Extract<AiKeyProvider, "lmstudio" | "ollama">;
+/**
+ * A private, OpenAI-compatible model gateway on the operator's own network.
+ * Its model ids are role aliases (for example `signalscribe-reporter`) that the
+ * gateway resolves to an upstream session, so this dashboard never names a model.
+ */
+export type GatewayAiProvider = Extract<AiKeyProvider, "gateway">;
 export type AiModelOption = {
   id: string;
   label: string;
@@ -77,6 +83,7 @@ export type PublicSettings = {
     provider: AiProvider;
     model: string;
     localBaseUrls: Record<LocalAiProvider, string>;
+    gatewayBaseUrl: string;
     keySet: Record<AiKeyProvider, boolean>;
     keySource: Record<AiKeyProvider, "none" | "settings" | "environment">;
   };
@@ -105,6 +112,7 @@ export type SettingsUpdate = Omit<
     provider: AiProvider;
     model: string;
     localBaseUrls?: Partial<Record<LocalAiProvider, string>>;
+    gatewayBaseUrl?: string;
     apiKeys?: Partial<Record<AiKeyProvider, string>>;
     clearKeys?: AiKeyProvider[];
   };

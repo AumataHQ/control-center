@@ -135,8 +135,9 @@ const emptySettings: PublicSettings = {
     provider: "none",
     model: "",
     localBaseUrls: DEFAULT_LOCAL_AI_URLS,
-    keySet: { openai: false, anthropic: false, gemini: false, xai: false, lmstudio: false, ollama: false },
-    keySource: { openai: "none", anthropic: "none", gemini: "none", xai: "none", lmstudio: "none", ollama: "none" },
+    gatewayBaseUrl: "",
+    keySet: { openai: false, anthropic: false, gemini: false, xai: false, gateway: false, lmstudio: false, ollama: false },
+    keySource: { openai: "none", anthropic: "none", gemini: "none", xai: "none", gateway: "none", lmstudio: "none", ollama: "none" },
   },
   dailyBrief: { sourceLabels: [], lookbackDays: 7, sections: { industry: 5, mentions: 5, newsletters: 5 } },
 };

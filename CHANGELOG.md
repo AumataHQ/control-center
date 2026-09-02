@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Added a private model gateway provider. Background curation, mention summaries, and newsletter extraction can now run against an OpenAI-compatible gateway on your own network, selecting a route by the job it does rather than naming a vendor model. Gateway addresses are restricted to private networks, redirects are refused, and an upstream authentication failure returned as a successful completion is rejected instead of becoming curated content.
+- Added recovery of truncated model output, so a reply cut off at its token limit is closed structurally instead of discarded. Incomplete entries are dropped rather than guessed.
+
 ## 0.3.1 - 2026-08-25
 
 - Added persistent dark mode with a saved theme preference.

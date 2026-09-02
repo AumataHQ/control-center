@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useId, useState } from "react";
-import { Cpu, Globe2, KeyRound, RefreshCw, ShieldCheck, Sparkles, Trash2 } from "lucide-react";
+import { Cpu, Globe2, KeyRound, Network, RefreshCw, ShieldCheck, Sparkles, Trash2 } from "lucide-react";
 import type { AiKeyProvider, AiModelsResponse, AiProvider, PublicSettings, SettingsUpdate } from "@/lib/types";
-import { AI_KEY_PROVIDERS, AI_PROVIDER_LABELS, DEFAULT_AI_MODELS, DEFAULT_LOCAL_AI_URLS, isLocalAiProvider, localAiBaseUrl } from "@/lib/ai-providers";
+import { AI_KEY_PROVIDERS, AI_PROVIDER_LABELS, DEFAULT_AI_MODELS, DEFAULT_LOCAL_AI_URLS, gatewayBaseUrl, isGatewayAiProvider, isLocalAiProvider, localAiBaseUrl } from "@/lib/ai-providers";
 import { modelOverrideAfterProviderChange } from "@/lib/ai-settings";
 import { SettingsInput } from "@/components/settings-input";
 import styles from "./ai-provider-settings.module.css";
@@ -17,10 +17,12 @@ export function AiProviderSettings({ value, onChange }: {
   const id = useId();
   const provider = value.provider;
   const local = isLocalAiProvider(provider);
+  const gateway = isGatewayAiProvider(provider);
   const pendingKey = provider === "none" ? "" : value.apiKeys?.[provider] || "";
   const savedKey = provider !== "none" && Boolean(value.keySet[provider]);
   const clearingKey = provider !== "none" && Boolean(value.clearKeys?.includes(provider));
-  const baseUrl = local ? value.localBaseUrls?.[provider] ?? DEFAULT_LOCAL_AI_URLS[provider] : "";
+  const gatewayUrl = value.gatewayBaseUrl ?? "";
+  const baseUrl = local ? value.localBaseUrls?.[provider] ?? DEFAULT_LOCAL_AI_URLS[provider] : gateway ? gatewayUrl : "";
   const [reload, setReload] = useState(0);
   const [state, setState] = useState<{ provider: AiProvider; loading: boolean; data?: AiModelsResponse; error?: string }>({ provider: "none", loading: false });
 
@@ -32,14 +34,16 @@ export function AiProviderSettings({ value, onChange }: {
         setState({ provider, loading: false });
         return;
       }
+      if (gateway && !baseUrl.trim()) { setState({ provider, loading: false }); return; }
       setState({ provider, loading: true });
       try {
         if (local) localAiBaseUrl(provider, baseUrl);
+        if (gateway) gatewayBaseUrl(baseUrl);
         const response = await fetch("/api/ai/models", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           signal: controller.signal,
-          body: JSON.stringify({ provider, apiKey: pendingKey || undefined, baseUrl: local ? baseUrl : undefined, refresh: reload > 0, useSavedKey: !clearingKey }),
+          body: JSON.stringify({ provider, apiKey: pendingKey || undefined, baseUrl: local || gateway ? baseUrl : undefined, refresh: reload > 0, useSavedKey: !clearingKey }),
         });
         const payload = await response.json() as AiModelsResponse;
         if (!response.ok || payload.error) throw new Error(payload.error || "Could not load models. Try again.");
@@ -49,7 +53,7 @@ export function AiProviderSettings({ value, onChange }: {
       }
     }, pendingKey ? 650 : 0);
     return () => { window.clearTimeout(timer); controller.abort(); };
-  }, [provider, local, pendingKey, savedKey, clearingKey, baseUrl, reload]);
+  }, [provider, local, gateway, pendingKey, savedKey, clearingKey, baseUrl, reload]);
 
   const active = state.provider === provider ? state : { provider, loading: false };
   const models = active.data?.models || [];
@@ -76,12 +80,13 @@ export function AiProviderSettings({ value, onChange }: {
           onChange({ ...value, provider: next, model: modelOverrideAfterProviderChange(provider, next, value.model) });
         }}>
           <option value="none">{AI_PROVIDER_LABELS.none}</option>
-          <optgroup label="Cloud providers">{AI_KEY_PROVIDERS.filter((item) => !isLocalAiProvider(item)).map((item) => <option key={item} value={item}>{AI_PROVIDER_LABELS[item]}</option>)}</optgroup>
+          <optgroup label="Cloud providers">{AI_KEY_PROVIDERS.filter((item) => !isLocalAiProvider(item) && !isGatewayAiProvider(item)).map((item) => <option key={item} value={item}>{AI_PROVIDER_LABELS[item]}</option>)}</optgroup>
+          <optgroup label="On your network">{AI_KEY_PROVIDERS.filter(isGatewayAiProvider).map((item) => <option key={item} value={item}>{AI_PROVIDER_LABELS[item]}</option>)}</optgroup>
           <optgroup label="On this computer">{AI_KEY_PROVIDERS.filter(isLocalAiProvider).map((item) => <option key={item} value={item}>{AI_PROVIDER_LABELS[item]}</option>)}</optgroup>
         </select>
       </div>
       <div className="settings-field">
-        <label htmlFor={`${id}-model`}>Model<small>{local ? "Only already-loaded local text models are listed." : "Live options from this provider’s API, using your key."}</small></label>
+        <label htmlFor={`${id}-model`}>Model<small>{local ? "Only already-loaded local text models are listed." : gateway ? "Routes your gateway publishes. A route names a job, not a vendor model." : "Live options from this provider’s API, using your key."}</small></label>
         <select id={`${id}-model`} name="cc-ai-model-choice" autoComplete="off" value={value.model} disabled={provider === "none"} onChange={(event) => onChange({ ...value, model: event.target.value })}>
           <option value="">Default{defaultModel ? ` · ${defaultModel}` : local ? " · available loaded model" : ""}</option>
           {value.model && !modelAvailable && <option value={value.model} disabled>{value.model} · {active.loading ? "checking availability" : "not in current list"}</option>}
@@ -91,13 +96,25 @@ export function AiProviderSettings({ value, onChange }: {
     </div>
 
     {provider !== "none" && <>
-      <div className={`${styles.modeCard} ${local ? styles.local : ""}`}>
-        {local ? <Cpu size={23} /> : <Globe2 size={23} />}
+      <div className={`${styles.modeCard} ${local || gateway ? styles.local : ""}`}>
+        {local ? <Cpu size={23} /> : gateway ? <Network size={23} /> : <Globe2 size={23} />}
         <div>
-          <b>{local ? "Local curation, your model" : "Cloud curation + public-web research"}</b>
-          <p>{local ? "No paid API key required. Keep a text model loaded with enough context for the news being processed. The app checks its reported capacity and pauses oversized requests instead of cutting evidence or increasing your memory allocation. Built-in collectors find sources; local models summarize and rank them, without live web research." : "Cloud models can curate collected stories and research public mentions. Usage is billed by your provider; an API key is separate from a chat subscription."}</p>
+          <b>{local ? "Local curation, your model" : gateway ? "Your own gateway, fixed cost" : "Cloud curation + public-web research"}</b>
+          <p>{local ? "No paid API key required. Keep a text model loaded with enough context for the news being processed. The app checks its reported capacity and pauses oversized requests instead of cutting evidence or increasing your memory allocation. Built-in collectors find sources; local models summarize and rank them, without live web research." : gateway ? "Curation runs against an OpenAI-compatible gateway on your own network, so it costs whatever that gateway already costs rather than being billed per token. You choose a route by the job it does; the gateway decides which model answers. Live web research is not offered here, because those routes carry their own tool contracts this dashboard does not drive." : "Cloud models can curate collected stories and research public mentions. Usage is billed by your provider; an API key is separate from a chat subscription."}</p>
         </div>
       </div>
+
+      {gateway && <div className={styles.connectionGrid}>
+        <div className="settings-field">
+          <label htmlFor={`${id}-gateway-endpoint`}>Gateway address<small>An OpenAI-compatible server on a private network — loopback, 10.x, 172.16–31.x, 192.168.x, 100.64–127.x, or a private hostname. Public addresses are refused.</small></label>
+          <SettingsInput id={`${id}-gateway-endpoint`} fieldKey="gateway-endpoint" type="url" value={gatewayUrl} placeholder="http://100.64.0.1:8643/v1" onChange={(event) => onChange({ ...value, gatewayBaseUrl: event.target.value })} />
+        </div>
+        <div className="settings-field">
+          <label htmlFor={`${id}-gateway-token`}>Gateway key<small>{keyStatus("gateway")}. This authenticates you to your own gateway; it is not an upstream provider token.</small></label>
+          <SettingsInput id={`${id}-gateway-token`} fieldKey="gateway-server-token" type="password" value={pendingKey} placeholder={savedKey ? "Saved key · leave blank to keep" : "Paste the gateway key"} onChange={(event) => onChange({ ...value, apiKeys: { ...value.apiKeys, gateway: event.target.value }, clearKeys: value.clearKeys?.filter((item) => item !== "gateway") })} />
+          {value.keySource.gateway === "settings" && <button type="button" className="text-button danger" onClick={() => onChange({ ...value, apiKeys: { ...value.apiKeys, gateway: "" }, clearKeys: [...new Set([...(value.clearKeys || []), "gateway" as AiKeyProvider])], keySet: { ...value.keySet, gateway: false }, keySource: { ...value.keySource, gateway: "none" } })}><Trash2 size={13} /> Clear saved key</button>}
+        </div>
+      </div>}
 
       {local && <div className={styles.connectionGrid}>
         <div className="settings-field">
@@ -112,7 +129,7 @@ export function AiProviderSettings({ value, onChange }: {
       </div>}
 
       <div className={styles.modelStatus} aria-live="polite">
-        <div>{active.loading ? <span>Checking available models…</span> : active.error ? <span className={styles.error}>{active.error}</span> : active.data ? <span>{models.length ? `${models.length} ${local ? "loaded local" : "available text"} model${models.length === 1 ? "" : "s"}` : local ? "No loaded local text models found. Load one in your model app, then reload this list." : "No compatible text models were returned for this key."}{active.data.cached ? " · cached" : ""}</span> : <span>{local ? "Checking the local server…" : "Add a key below to load your model choices. Default remains available."}</span>}</div>
+        <div>{active.loading ? <span>Checking available models…</span> : active.error ? <span className={styles.error}>{active.error}</span> : active.data ? <span>{models.length ? `${models.length} ${local ? "loaded local model" : gateway ? "published route" : "available text model"}${models.length === 1 ? "" : "s"}` : local ? "No loaded local text models found. Load one in your model app, then reload this list." : gateway ? "The gateway did not publish any routes. Check that it is running and reachable." : "No compatible text models were returned for this key."}{active.data.cached ? " · cached" : ""}</span> : <span>{local ? "Checking the local server…" : gateway ? "Add the gateway address and key to load its routes." : "Add a key below to load your model choices. Default remains available."}</span>}</div>
         <button className="button button-outline" type="button" disabled={active.loading} onClick={() => setReload((current) => current + 1)}><RefreshCw size={13} className={active.loading ? styles.spin : undefined} /> Reload models</button>
       </div>
       {value.model && active.data && !modelAvailable && <p className={styles.error}>The saved model is not available in this list. Choose Default or another available model before running AI tasks.</p>}
@@ -120,7 +137,7 @@ export function AiProviderSettings({ value, onChange }: {
 
     <div className={`source-editor ${styles.keys}`}>
       <div className="source-editor-head"><b><KeyRound size={13} /> Cloud provider keys</b><span>Only your selected provider is called.</span></div>
-      {AI_KEY_PROVIDERS.filter((item) => !isLocalAiProvider(item)).map((item) => <div className={`ai-key-row ${provider === item ? styles.selectedKey : ""}`} key={item}>
+      {AI_KEY_PROVIDERS.filter((item) => !isLocalAiProvider(item) && !isGatewayAiProvider(item)).map((item) => <div className={`ai-key-row ${provider === item ? styles.selectedKey : ""}`} key={item}>
         <div><b>{AI_PROVIDER_LABELS[item]}{provider === item && <span className={styles.activeBadge}>Active</span>}</b><small>{keyStatus(item)}</small></div>
         <SettingsInput aria-label={`${AI_PROVIDER_LABELS[item]} API key`} fieldKey={`${item}-provider-key`} type="password" value={value.apiKeys?.[item] || ""} placeholder={value.keySet[item] ? "Configured · leave blank to keep" : "Paste an API key"} onChange={(event) => onChange({ ...value, apiKeys: { ...value.apiKeys, [item]: event.target.value }, clearKeys: value.clearKeys?.filter((entry) => entry !== item) })} />
         {value.keySource[item] === "settings" && <button className="text-button danger" type="button" onClick={() => onChange({ ...value, apiKeys: { ...value.apiKeys, [item]: "" }, clearKeys: [...new Set([...(value.clearKeys || []), item])], keySet: { ...value.keySet, [item]: false }, keySource: { ...value.keySource, [item]: "none" } })}><Trash2 size={13} /> Clear saved key</button>}
@@ -128,7 +145,7 @@ export function AiProviderSettings({ value, onChange }: {
     </div>
     <div className="settings-caveat">
       <ShieldCheck size={17} />
-      <p>Saved keys stay server-side and are never sent back to your browser. Newsletter text, with email addresses and subscriber tracking links masked, goes only to your selected provider. Tasks, reminders, and other private connector content are not sent. {local ? "Local endpoints are restricted to this computer; disable LM Link, remote forwarding, or other proxy features in your model app if you want processing to stay on this computer. This app does not download or load models for you." : "Background processing pauses on provider failure, while saved stories remain available."}</p>
+      <p>Saved keys stay server-side and are never sent back to your browser. Newsletter text, with email addresses and subscriber tracking links masked, goes only to your selected provider. Tasks, reminders, and other private connector content are not sent. {local ? "Local endpoints are restricted to this computer; disable LM Link, remote forwarding, or other proxy features in your model app if you want processing to stay on this computer. This app does not download or load models for you." : gateway ? "A gateway address must be on a private network, and this app refuses redirects and caps response size on every call to it. Whatever the gateway forwards to upstream is governed by that gateway, not by this dashboard." : "Background processing pauses on provider failure, while saved stories remain available."}</p>
     </div>
   </div>;
 }

@@ -5,7 +5,7 @@ import {
   configuredAiApiKey,
   type StoredSettings,
 } from "@/lib/server/settings";
-import { AI_PROVIDER_LABELS, DEFAULT_AI_MODELS, aiSupportsWebSearch, cleanAiModelOverride, isLocalAiProvider, localAiBaseUrl } from "@/lib/ai-providers";
+import { AI_PROVIDER_LABELS, DEFAULT_AI_MODELS, aiSupportsWebSearch, cleanAiModelOverride, gatewayBaseUrl, isGatewayAiProvider, isLocalAiProvider, localAiBaseUrl } from "@/lib/ai-providers";
 import { aiProviderJson } from "@/lib/ai-provider-http";
 import { discoverAiModels } from "@/lib/server/ai-models";
 import { assertLocalAiContext } from "@/lib/ai-local-context";
@@ -41,6 +41,14 @@ async function modelFor(settings: StoredSettings, provider: AiKeyProvider): Prom
     return selected;
   }
   if (override) return { id: override, label: override };
+  if (isGatewayAiProvider(provider)) {
+    // Gateway routes are operator-defined, so there is no safe built-in default
+    // to fall back on. Refuse rather than sending an empty model id.
+    const available = await discoverAiModels(settings, { refresh: true });
+    if (!available.defaultModel)
+      throw new AiNotConfiguredError("The model gateway did not list any routes. Check that it is running and reachable, then choose a route in Settings.");
+    return { id: available.defaultModel, label: available.defaultModel };
+  }
   try {
     const available = await discoverAiModels(settings);
     const model = available.defaultModel || DEFAULT_AI_MODELS[provider];
@@ -240,6 +248,28 @@ async function runXai(key: string, model: string, options: AiRunOptions) {
   return openAiText(payload);
 }
 
+async function runGateway(settings: StoredSettings, key: string, model: string, options: AiRunOptions) {
+  const root = gatewayBaseUrl(settings.ai.gatewayBaseUrl);
+  const payload = await providerFetch("gateway", `${root}/chat/completions`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model,
+      messages: [{ role: "user", content: options.prompt }],
+      temperature: 0,
+      max_tokens: boundedTokens(options.maxOutputTokens),
+      stream: false,
+    }),
+  });
+  const text = chatCompletionText(payload);
+  // An upstream session that has expired is reported by some gateways as a
+  // successful completion whose body is the error prose. Refuse it here rather
+  // than letting that text reach a summary or a ranked story.
+  if (/\b(?:provider authentication failed|upstream authentication|session expired|not authenticated)\b/i.test(text))
+    throw new Error("The model gateway reported an upstream authentication failure. Re-authorize its provider session, then retry.");
+  return text;
+}
+
 async function runLocalAi(settings: StoredSettings, provider: "lmstudio" | "ollama", key: string, model: string, options: AiRunOptions, loadedContextLength?: number) {
   const outputTokens = boundedTokens(options.maxOutputTokens);
   const contextLength = assertLocalAiContext(provider, loadedContextLength, options.prompt, outputTokens);
@@ -292,7 +322,9 @@ export async function runConfiguredAi(
         ? await runGemini(key, model, options)
         : provider === "xai"
           ? await runXai(key, model, options)
-          : await runLocalAi(settings, provider, key, model, options, selectedModel.contextLength);
+          : isGatewayAiProvider(provider)
+            ? await runGateway(settings, key, model, options)
+            : await runLocalAi(settings, provider, key, model, options, selectedModel.contextLength);
   if (!text.trim()) throw new Error(`${provider} returned no usable text.`);
   return { provider, model, text };
 }
@@ -316,5 +348,73 @@ export function parseAiJson<T>(text: string): T {
       // Try the next bounded JSON representation.
     }
   }
+  for (const candidate of candidates) {
+    const repaired = repairTruncatedJson(candidate);
+    if (repaired !== undefined) return repaired as T;
+  }
   throw new Error("The AI provider returned invalid JSON.");
+}
+
+/**
+ * Closes a JSON document that was cut off mid-value.
+ *
+ * A model that stops at its output limit emits well-formed JSON up to the
+ * truncation point, so the trailing structure can be reconstructed. Providers
+ * that support a JSON response format rarely need this; a private gateway
+ * fronting subscription sessions cannot offer one, so its output has to be
+ * recoverable here instead. Returns undefined when the text is malformed for
+ * any other reason — this only ever closes structure, never invents values.
+ */
+export function repairTruncatedJson(input: string): unknown {
+  const start = input.search(/[{[]/);
+  if (start < 0) return undefined;
+  const stack: string[] = [];
+  // Positions where a complete element ended, newest last. Truncation can land
+  // mid-key, so closing the structure may need to back off to one of these.
+  const boundaries: { index: number; depth: number }[] = [];
+  let inString = false;
+  let escaped = false;
+  let lastComplete = -1;
+  for (let index = start; index < input.length; index++) {
+    const character = input[index];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (character === "\\") escaped = true;
+      else if (character === '"') inString = false;
+      continue;
+    }
+    if (character === '"') { inString = true; continue; }
+    if (character === "{" || character === "[") { stack.push(character === "{" ? "}" : "]"); continue; }
+    if (character === "}" || character === "]") {
+      if (stack.pop() !== character) return undefined;
+      if (!stack.length) lastComplete = index;
+      continue;
+    }
+    if (character === ",") boundaries.push({ index, depth: stack.length });
+  }
+  // A complete document that simply had trailing prose after it.
+  if (!stack.length && lastComplete >= 0) {
+    try { return JSON.parse(input.slice(start, lastComplete + 1)); } catch { return undefined; }
+  }
+  if (!stack.length) return undefined;
+
+  const close = (body: string, depth: number) => {
+    let candidate = body;
+    for (let index = depth - 1; index >= 0; index--) candidate += stack[index];
+    try { return { value: JSON.parse(candidate) as unknown }; } catch { return undefined; }
+  };
+
+  // First try keeping everything, closing an open string if truncation cut one.
+  let head = input.slice(start);
+  if (inString) head += escaped ? '\\"' : '"';
+  const direct = close(head.replace(/[,:]\s*$/, ""), stack.length);
+  if (direct) return direct.value;
+
+  // Otherwise discard the incomplete tail one element at a time.
+  for (let index = boundaries.length - 1; index >= 0; index--) {
+    const boundary = boundaries[index];
+    const attempt = close(input.slice(start, boundary.index), boundary.depth);
+    if (attempt) return attempt.value;
+  }
+  return undefined;
 }
