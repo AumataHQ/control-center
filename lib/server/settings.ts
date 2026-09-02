@@ -62,6 +62,7 @@ export type StoredSettings = {
     gatewayBaseUrl: string;
   };
   dailyBrief: PublicSettings["dailyBrief"];
+  pipeline: PublicSettings["pipeline"];
 };
 
 const defaults: StoredSettings = {
@@ -99,6 +100,7 @@ const defaults: StoredSettings = {
     gatewayBaseUrl: DEFAULT_GATEWAY_URL,
   },
   dailyBrief: { sourceLabels: [], lookbackDays: 7, sections: defaultBriefSections },
+  pipeline: { root: "", publicUrl: "" },
 };
 
 let settingsWriteQueue = Promise.resolve();
@@ -175,6 +177,7 @@ export async function readSettings(): Promise<StoredSettings> {
           profileUrl: account.profileUrl ?? "",
         })),
       },
+      pipeline: { ...defaults.pipeline, ...parsed.pipeline },
       ai: {
         ...defaults.ai,
         ...parsed.ai,
@@ -273,6 +276,7 @@ export function toPublicSettings(settings: StoredSettings): PublicSettings {
       },
     },
     dailyBrief: settings.dailyBrief,
+    pipeline: settings.pipeline,
   };
 }
 
@@ -327,6 +331,32 @@ function cleanIndustrySources(sources: SettingsUpdate["industry"]["sources"]) {
     ];
   });
   return [...new Map(cleaned.map((source) => [source.url, source])).values()];
+}
+
+/**
+ * A pipeline checkout to observe. Absolute paths only: the dashboard resolves
+ * artifacts beneath this directory, so a relative path would be interpreted
+ * against the server's working directory rather than the operator's intent.
+ */
+export function cleanPipelineRoot(value: unknown) {
+  const raw = typeof value === "string" ? value.trim() : "";
+  if (!raw) return "";
+  if (!path.isAbsolute(raw))
+    throw new Error("Enter the full path to the pipeline checkout, starting from the root of the drive.");
+  if (raw.includes("\0")) throw new Error("That path is not valid.");
+  return path.normalize(raw).replace(/[/\\]+$/, "") || raw;
+}
+
+export function cleanPipelinePublicUrl(value: unknown) {
+  const raw = typeof value === "string" ? value.trim() : "";
+  if (!raw) return "";
+  let url: URL;
+  try { url = new URL(raw); } catch {
+    throw new Error("Enter the published site address, including https://.");
+  }
+  if (!["http:", "https:"].includes(url.protocol) || url.username || url.password)
+    throw new Error("The published site address must be an http:// or https:// URL with no credentials.");
+  return url.origin;
 }
 
 export async function updateSettings(update: SettingsUpdate) {
@@ -484,6 +514,10 @@ export async function updateSettings(update: SettingsUpdate) {
         // Validated only when a value is present, so selecting another provider
         // never forces the operator to supply a gateway address.
         gatewayBaseUrl: nextGatewayBaseUrl,
+      },
+      pipeline: {
+        root: cleanPipelineRoot(update.pipeline?.root ?? current.pipeline.root),
+        publicUrl: cleanPipelinePublicUrl(update.pipeline?.publicUrl ?? current.pipeline.publicUrl),
       },
       dailyBrief: {
         sections: normalizeBriefSections(update.dailyBrief?.sections ?? current.dailyBrief.sections),

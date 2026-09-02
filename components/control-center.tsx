@@ -34,6 +34,7 @@ import {
   Music2,
   Moon,
   Newspaper,
+  Network,
   Plus,
   Radio,
   RefreshCw,
@@ -49,6 +50,7 @@ import {
 } from "lucide-react";
 import type {
   AudienceMetric,
+  PipelineSnapshot,
   AudiencePlatform,
   DailyBriefItem,
   DailyBriefResponse,
@@ -75,6 +77,7 @@ import { SettingsInput } from "@/components/settings-input";
 import { AiProviderSettings } from "@/components/ai-provider-settings";
 import { DailySnapshot } from "@/components/daily-snapshot";
 import { AudienceInsights } from "@/components/audience-insights";
+import { PipelineView } from "@/components/pipeline-view";
 import type { AudienceHistorySeries } from "@/lib/audience-charts";
 import { AI_PROVIDER_LABELS, DEFAULT_LOCAL_AI_URLS, isAiReady } from "@/lib/ai-providers";
 import { sortFeedStories, selectNewsletterTopics, newsletterSourceOptions } from "@/lib/feed-priority";
@@ -93,6 +96,7 @@ type Tab =
   | "audience"
   | "newsletters"
   | "tasks"
+  | "pipeline"
   | "settings";
 type SettingsSection =
   | "general"
@@ -102,6 +106,7 @@ type SettingsSection =
   | "audience"
   | "ai"
   | "dailyBrief"
+  | "pipeline"
   | "integrations";
 type Reminder = ReminderItem;
 type Task = TaskItem;
@@ -140,6 +145,7 @@ const emptySettings: PublicSettings = {
     keySource: { openai: "none", anthropic: "none", gemini: "none", xai: "none", gateway: "none", lmstudio: "none", ollama: "none" },
   },
   dailyBrief: { sourceLabels: [], lookbackDays: 7, sections: { industry: 5, mentions: 5, newsletters: 5 } },
+  pipeline: { root: "", publicUrl: "" },
 };
 
 const nav: { id: Tab; label: string; icon: typeof Activity }[] = [
@@ -150,6 +156,7 @@ const nav: { id: Tab; label: string; icon: typeof Activity }[] = [
   { id: "audience", label: "Audience", icon: Users },
   { id: "newsletters", label: "Newsletters", icon: Newspaper },
   { id: "tasks", label: "Tasks", icon: ListTodo },
+  { id: "pipeline", label: "Pipeline", icon: Network },
 ];
 
 function classNames(...values: Array<string | false | null | undefined>) {
@@ -2242,6 +2249,25 @@ function settingsDraft(settings: PublicSettings): SettingsDraft {
   };
 }
 
+function PipelineTab({ openSettings }: { openSettings: () => void }) {
+  // The pipeline publishes once a day on its own schedule, so a five minute
+  // poll is plenty; Refresh covers the case of watching a run land.
+  const { data, loading, error, refresh } = useLiveData<PipelineSnapshot>(
+    "/api/pipeline",
+    5 * 60 * 1000,
+  );
+  if (error && !data) return <LiveLoadError error={error} retry={refresh} />;
+  if (loading && !data) return <LoadingPanel />;
+  return (
+    <PipelineView
+      snapshot={data}
+      loading={loading}
+      onRefresh={refresh}
+      onSetup={openSettings}
+    />
+  );
+}
+
 function SettingsView({
   settings,
   onSaved,
@@ -2414,6 +2440,7 @@ function SettingsView({
     { id: "newsletters", label: "Newsletters", icon: Mail },
     { id: "audience", label: "Audience", icon: Users },
     { id: "ai", label: "AI curation", icon: Sparkles },
+    { id: "pipeline", label: "Pipeline", icon: Network },
     { id: "integrations", label: "Integrations", icon: Cable },
   ];
   return (
@@ -3249,6 +3276,76 @@ function SettingsView({
               onChange={(ai) => setDraft((value) => ({ ...value, ai }))}
             /></Panel>
           )}
+          {section === "pipeline" && (
+            <>
+              <div className="settings-title">
+                <Network />
+                <div>
+                  <p className="eyebrow">Publication pipeline</p>
+                  <h2>Watch a pipeline</h2>
+                  <p>
+                    A read-only view of a publication pipeline running on this machine: its
+                    editions, publication checks, per-source health, and model-route usage. The
+                    pipeline keeps its own schedule; nothing here starts, stops, or edits it.
+                  </p>
+                </div>
+              </div>
+              <div className="settings-field">
+                <label htmlFor="cc-pipeline-root">
+                  Pipeline directory
+                  <small>
+                    The full path to the checkout, for example
+                    /Users/you/Documents/GitHub/signalscribe-desk. Reads stay inside this
+                    directory; a link pointing out of it is refused rather than followed.
+                  </small>
+                </label>
+                <SettingsInput
+                  id="cc-pipeline-root"
+                  fieldKey="pipeline-root"
+                  type="text"
+                  value={draft.pipeline?.root || ""}
+                  placeholder="/absolute/path/to/pipeline"
+                  onChange={(event) =>
+                    setDraft((value) => ({
+                      ...value,
+                      pipeline: { ...value.pipeline, root: event.target.value },
+                    }))
+                  }
+                />
+              </div>
+              <div className="settings-field">
+                <label htmlFor="cc-pipeline-url">
+                  Published site <span className="optional">Optional</span>
+                  <small>
+                    Where the finished editions are served. Used only to link out from the
+                    editions list.
+                  </small>
+                </label>
+                <SettingsInput
+                  id="cc-pipeline-url"
+                  fieldKey="pipeline-public-url"
+                  type="url"
+                  value={draft.pipeline?.publicUrl || ""}
+                  placeholder="https://example.com"
+                  onChange={(event) =>
+                    setDraft((value) => ({
+                      ...value,
+                      pipeline: { ...value.pipeline, publicUrl: event.target.value },
+                    }))
+                  }
+                />
+              </div>
+              <div className="settings-caveat">
+                <ShieldCheck size={17} />
+                <p>
+                  Artifacts are read from disk and never written. The dashboard does not run the
+                  pipeline, publish anything, or change its watchlist: editing sources stays with
+                  the pipeline&apos;s own format-preserving writer, so its commit trail remains the
+                  record of what changed.
+                </p>
+              </div>
+            </>
+          )}
           {section === "integrations" && (
             <Panel className="settings-panel">
               <div className="settings-title">
@@ -3767,6 +3864,9 @@ export function ControlCenter() {
         )}{" "}
         {activeTab === "tasks" && (
           <TasksView tasks={tasks} setTasks={setTasks} />
+        )}{" "}
+        {activeTab === "pipeline" && (
+          <PipelineTab openSettings={() => openSettings("pipeline")} />
         )}{" "}
         {activeTab === "settings" && (
           <SettingsView

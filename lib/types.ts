@@ -92,6 +92,96 @@ export type PublicSettings = {
     lookbackDays: number;
     sections: { industry: number; mentions: number; newsletters: number };
   };
+  /**
+   * An optional publication pipeline this dashboard observes. The pipeline runs
+   * itself; this is a read-only operator view over the artifacts it writes.
+   */
+  pipeline: {
+    root: string;
+    publicUrl: string;
+  };
+};
+
+export type PipelineEdition = {
+  date: string;
+  title: string;
+  format: "html" | "markdown";
+  isToday: boolean;
+  writerModel?: string;
+};
+
+export type PipelineCheck = {
+  name: string;
+  ok: boolean;
+  detail?: string;
+};
+
+export type PipelineRunAttempt = {
+  startedAt: string;
+  finishedAt: string;
+  exitCode: number;
+  status: string;
+};
+
+export type PipelineSourceState = {
+  name: string;
+  category: "sources" | "dependencies";
+  state: string;
+  detail?: string;
+  checkedAt?: string;
+};
+
+export type PipelineRouteUsage = {
+  route: string;
+  calls: number;
+  ok: number;
+  failed: number;
+  totalTokens: number;
+  averageLatencyMs: number;
+  outcomes: Record<string, number>;
+};
+
+export type PipelineUsage = {
+  day: string;
+  calls: number;
+  ok: number;
+  failed: number;
+  retriedAttempts: number;
+  totalTokens: number;
+  routes: PipelineRouteUsage[];
+  roles: { role: string; calls: number; totalTokens: number }[];
+};
+
+export type PipelineRoutePreflight = {
+  route: string;
+  role: string;
+  ok: boolean;
+  required: boolean;
+  kind?: string;
+  detail?: string;
+};
+
+export type PipelineSnapshot = {
+  configured: boolean;
+  rootReadable: boolean;
+  day: string;
+  publicUrl?: string;
+  error?: string;
+  editions: PipelineEdition[];
+  latestEdition?: PipelineEdition;
+  publication?: {
+    day?: string;
+    writerModel?: string;
+    checks: PipelineCheck[];
+    passed: number;
+    failed: number;
+  };
+  run?: { status: string; attempts: PipelineRunAttempt[] };
+  sources: PipelineSourceState[];
+  preflight?: { ok: boolean; reachable: boolean; checkedAt?: string; routes: PipelineRoutePreflight[] };
+  usage?: PipelineUsage;
+  radar?: { counts: Record<string, number>; enabled: number; disabled: number };
+  profile?: { lanes: string[]; painPoints: string[]; weights: Record<string, number> };
 };
 
 export type SettingsUpdate = Omit<
@@ -108,6 +198,7 @@ export type SettingsUpdate = Omit<
   audience: {
     accounts: AudienceAccountInput[];
   };
+  pipeline?: { root?: string; publicUrl?: string };
   ai?: {
     provider: AiProvider;
     model: string;

@@ -44,6 +44,7 @@ function gatewaySettings(model = "", baseUrl = "http://100.64.0.1:8643/v1"): Sto
       gatewayBaseUrl: baseUrl,
     },
     dailyBrief: { sourceLabels: [], lookbackDays: 7, sections: { industry: 5, mentions: 5, newsletters: 5 } },
+    pipeline: { root: "", publicUrl: "" },
   };
 }
 

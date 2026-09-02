@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added a Pipeline view: a read-only operator surface over a publication pipeline running on this machine. It shows whether today's edition published, which publication checks passed, per-source health with the reason each source was quarantined, scheduler attempts with exit codes, the model routes a preflight found healthy, and per-route model usage including calls that failed over. Reads are confined to the configured directory, and a symbolic link pointing out of it is refused rather than followed.
+
 - Added a private model gateway provider. Background curation, mention summaries, and newsletter extraction can now run against an OpenAI-compatible gateway on your own network, selecting a route by the job it does rather than naming a vendor model. Gateway addresses are restricted to private networks, redirects are refused, and an upstream authentication failure returned as a successful completion is rejected instead of becoming curated content.
 - Added recovery of truncated model output, so a reply cut off at its token limit is closed structurally instead of discarded. Incomplete entries are dropped rather than guessed.
 
