@@ -17,6 +17,7 @@ import { initializeIndustryStore } from "@/lib/industry-store";
 import { initializeCollectorCache } from "@/lib/collector-cache";
 import { initializeNewsletterStore } from "@/lib/newsletter-store";
 import { initializeAiUsageStore } from "@/lib/ai-usage-store";
+import { initializeBeatsStore } from "@/lib/beats-store";
 
 export { setContentArchived } from "@/lib/archive-store";
 export type { ContentCategory } from "@/lib/archive-store";
@@ -39,13 +40,13 @@ export function getDatabase() {
     const schema = database.prepare("PRAGMA user_version").get() as unknown as {
       user_version: number;
     };
-    if (schema.user_version > 7) {
+    if (schema.user_version > 8) {
       database.close();
       throw new Error(
-        `This data directory uses schema ${schema.user_version}, but this Control Center supports schema 7. Update the app before opening it.`,
+        `This data directory uses schema ${schema.user_version}, but this Control Center supports schema 8. Update the app before opening it.`,
       );
     }
-    if (databaseExisted && schema.user_version < 7) {
+    if (databaseExisted && schema.user_version < 8) {
       const backupDirectory = path.join(directory, "migration-backups");
       mkdirSync(backupDirectory, { recursive: true, mode: 0o700 });
       const backupPath = path.join(
@@ -55,18 +56,20 @@ export function getDatabase() {
       database.exec(`VACUUM INTO '${backupPath.replaceAll("'", "''")}'`);
       chmodSync(backupPath, 0o600);
     }
-    const initialized = initializeAiUsageStore(
-      initializeNewsletterStore(
-        initializeCollectorCache(
-        initializeIndustryStore(
-            initializeBriefStore(
-              initializeWorkspaceStore(initializeContentStore(database)),
-            ),
-          ),
-        ),
-      ),
-    );
-    if (schema.user_version < 7) initialized.exec("PRAGMA user_version = 7;");
+    // Each store owns its own tables and returns the same handle. A list
+    // rather than nested calls, because the nesting had already drifted out of
+    // any readable indentation and a new store should not have to re-wrap it.
+    const initialized = [
+      initializeContentStore,
+      initializeWorkspaceStore,
+      initializeBriefStore,
+      initializeIndustryStore,
+      initializeCollectorCache,
+      initializeNewsletterStore,
+      initializeAiUsageStore,
+      initializeBeatsStore,
+    ].reduce((handle, initialize) => initialize(handle), database);
+    if (schema.user_version < 8) initialized.exec("PRAGMA user_version = 8;");
     chmodSync(databasePath, 0o600);
     globalThis.controlCenterDatabase = initialized;
   }

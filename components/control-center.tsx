@@ -21,6 +21,7 @@ import {
   LayoutDashboard,
   Link2,
   ListTodo,
+  Crosshair,
   Library,
   Mail,
   Menu,
@@ -69,6 +70,7 @@ import { DailySnapshot } from "@/components/daily-snapshot";
 import { AudienceInsights } from "@/components/audience-insights";
 import { PipelineView } from "@/components/pipeline-view";
 import { NewsroomView } from "@/components/newsroom-view";
+import { BeatsView, type BeatsSnapshot } from "@/components/beats-view";
 import { SettingsView, type SettingsSection } from "@/components/settings-view";
 import {
   classNames,
@@ -112,6 +114,7 @@ type Tab =
   | "tasks"
   | "pipeline"
   | "newsroom"
+  | "beats"
   | "settings";
 type Reminder = ReminderItem;
 type Task = TaskItem;
@@ -164,6 +167,7 @@ const nav: { id: Tab; label: string; icon: typeof Activity }[] = [
   { id: "tasks", label: "Tasks", icon: ListTodo },
   { id: "pipeline", label: "Pipeline", icon: Network },
   { id: "newsroom", label: "Newsroom", icon: Library },
+  { id: "beats", label: "Beats", icon: Crosshair },
 ];
 
 function briefDueLabel(value?: string) {
@@ -1892,6 +1896,18 @@ function NewsroomTab({ openSettings }: { openSettings: () => void }) {
   );
 }
 
+function BeatsTab() {
+  // Beats change when you edit them, not on a timer, so this polls slowly and
+  // takes the fresh snapshot every mutation already returns.
+  const { data, loading, error, refresh, mutate } = useLiveData<BeatsSnapshot>(
+    "/api/beats",
+    10 * 60 * 1000,
+  );
+  if (error && !data) return <LiveLoadError error={error} retry={refresh} />;
+  if (loading && !data) return <LoadingPanel />;
+  return <BeatsView snapshot={data} loading={loading} onChanged={(next) => mutate(() => next)} />;
+}
+
 export function ControlCenter() {
   const [activeTab, setActiveTab] = useState<Tab>("today");
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -2289,6 +2305,7 @@ export function ControlCenter() {
         {activeTab === "tasks" && (
           <TasksView tasks={tasks} setTasks={setTasks} />
         )}{" "}
+        {activeTab === "beats" && <BeatsTab />}
         {activeTab === "newsroom" && (
           <NewsroomTab openSettings={() => openSettings("pipeline")} />
         )}
