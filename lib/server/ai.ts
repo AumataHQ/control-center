@@ -6,7 +6,9 @@ import {
   type StoredSettings,
 } from "@/lib/server/settings";
 import { AI_PROVIDER_LABELS, DEFAULT_AI_MODELS, aiSupportsWebSearch, cleanAiModelOverride, gatewayBaseUrl, isGatewayAiProvider, isLocalAiProvider, localAiBaseUrl } from "@/lib/ai-providers";
-import { aiProviderJson } from "@/lib/ai-provider-http";
+import { AiProviderRequestError, aiProviderJson } from "@/lib/ai-provider-http";
+import { recordAiUsage, type AiUsageEntry } from "@/lib/ai-usage-store";
+import { getDatabase } from "@/lib/server/database";
 import { discoverAiModels } from "@/lib/server/ai-models";
 import { assertLocalAiContext } from "@/lib/ai-local-context";
 
@@ -14,6 +16,8 @@ export type AiRunOptions = {
   prompt: string;
   webSearch?: boolean;
   maxOutputTokens?: number;
+  /** Which background job this call serves, for usage accounting. */
+  job?: string;
 };
 
 export type AiRunResult = {
@@ -298,6 +302,15 @@ async function runLocalAi(settings: StoredSettings, provider: "lmstudio" | "olla
   return typeof message?.content === "string" ? message.content : "";
 }
 
+function noteUsage(entry: AiUsageEntry) {
+  try {
+    recordAiUsage(getDatabase(), entry);
+  } catch {
+    // Accounting is never worth failing a curation run for: opening the
+    // database can fail for reasons that have nothing to do with inference.
+  }
+}
+
 export async function runConfiguredAi(
   settings: StoredSettings,
   options: AiRunOptions,
@@ -314,19 +327,36 @@ export async function runConfiguredAi(
     throw new AiNotConfiguredError(`${AI_PROVIDER_LABELS[provider]} can summarize and rank collected content, but it does not provide live web research. The built-in public-source collectors continue to run.`);
   const selectedModel = await modelFor(settings, provider);
   const model = selectedModel.id;
-  const text = provider === "openai"
-    ? await runOpenAi(key, model, options)
-    : provider === "anthropic"
-      ? await runAnthropic(key, model, options)
-      : provider === "gemini"
-        ? await runGemini(key, model, options)
-        : provider === "xai"
-          ? await runXai(key, model, options)
-          : isGatewayAiProvider(provider)
-            ? await runGateway(settings, key, model, options)
-            : await runLocalAi(settings, provider, key, model, options, selectedModel.contextLength);
-  if (!text.trim()) throw new Error(`${provider} returned no usable text.`);
-  return { provider, model, text };
+  const startedAt = Date.now();
+  const job = options.job || "curation";
+  try {
+    const text = provider === "openai"
+      ? await runOpenAi(key, model, options)
+      : provider === "anthropic"
+        ? await runAnthropic(key, model, options)
+        : provider === "gemini"
+          ? await runGemini(key, model, options)
+          : provider === "xai"
+            ? await runXai(key, model, options)
+            : isGatewayAiProvider(provider)
+              ? await runGateway(settings, key, model, options)
+              : await runLocalAi(settings, provider, key, model, options, selectedModel.contextLength);
+    if (!text.trim()) throw new Error(`${provider} returned no usable text.`);
+    noteUsage({ provider, model, job, outcome: "ok", latencyMs: Date.now() - startedAt });
+    return { provider, model, text };
+  } catch (error) {
+    // A failed call is the one worth seeing: a route that quietly stopped
+    // answering looks identical to a quiet day in the results alone.
+    noteUsage({
+      provider,
+      model,
+      job,
+      outcome: "failed",
+      latencyMs: Date.now() - startedAt,
+      errorKind: error instanceof AiProviderRequestError && error.status ? `http_${error.status}` : "error",
+    });
+    throw error;
+  }
 }
 
 export function parseAiJson<T>(text: string): T {

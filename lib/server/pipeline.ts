@@ -13,6 +13,8 @@ import type {
   PipelineRouteUsage,
 } from "@/lib/types";
 import { type StoredSettings } from "@/lib/server/settings";
+import { readAiUsage } from "@/lib/ai-usage-store";
+import { getDatabase } from "@/lib/server/database";
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_BYTES = 4_000_000;
@@ -306,11 +308,22 @@ export function pipelineDay(now = new Date(), timeZone = "America/New_York") {
   return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
 }
 
+function dashboardUsage() {
+  try {
+    return readAiUsage(getDatabase(), 7);
+  } catch {
+    return undefined;
+  }
+}
+
 export function readPipelineSnapshot(settings: StoredSettings, day?: string): PipelineSnapshot {
   const root = settings.pipeline.root;
   const today = day && DATE.test(day) ? day : pipelineDay();
+  // The dashboard's own spend is worth seeing whether or not a pipeline is
+  // configured: it is the half of the model bill this machine is responsible for.
+  const dashboard = dashboardUsage();
   if (!root)
-    return { configured: false, rootReadable: false, day: today, editions: [], sources: [] };
+    return { configured: false, rootReadable: false, day: today, editions: [], sources: [], dashboardUsage: dashboard };
   let readable = false;
   try {
     readable = statSync(root, { throwIfNoEntry: false })?.isDirectory() === true;
@@ -325,6 +338,7 @@ export function readPipelineSnapshot(settings: StoredSettings, day?: string): Pi
       error: "That pipeline directory could not be read. Check the path in Settings.",
       editions: [],
       sources: [],
+      dashboardUsage: dashboard,
     };
   const editions = readEditions(root, today);
   return {
@@ -341,5 +355,6 @@ export function readPipelineSnapshot(settings: StoredSettings, day?: string): Pi
     usage: readUsage(root, today),
     radar: readRadar(root),
     profile: readProfile(root),
+    dashboardUsage: dashboard,
   };
 }

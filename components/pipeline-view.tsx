@@ -39,6 +39,41 @@ function relative(value?: string) {
   return at.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
+function DashboardUsage({ usage }: { usage?: PipelineSnapshot["dashboardUsage"] }) {
+  if (!usage?.calls) return null;
+  return (
+    <div>
+      <div className={styles.rowHead} style={{ marginBottom: 8 }}>
+        <b>This dashboard&apos;s model calls</b>
+        <span className={styles.mono}>last 7 days</span>
+      </div>
+      <div className={styles.scroll}>
+        <table className={styles.table}>
+          <thead>
+            <tr><th>Job</th><th>Provider</th><th>Calls</th><th>OK</th><th>Failed</th><th>Avg ms</th></tr>
+          </thead>
+          <tbody>
+            {usage.rows.map((row) => (
+              <tr key={`${row.job}-${row.provider}-${row.model}`}>
+                <td className={styles.mono}>{row.job}</td>
+                <td className={styles.mono}>{row.provider === "gateway" ? "gateway" : row.provider}</td>
+                <td>{row.calls}</td>
+                <td>{row.ok}</td>
+                <td>{row.failed}</td>
+                <td>{row.averageLatencyMs}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className={styles.empty}>
+        Curation, mention summaries, and newsletter extraction run here rather than in the
+        pipeline, so this is the half of the model bill this machine is responsible for.
+      </p>
+    </div>
+  );
+}
+
 export function PipelineView({
   snapshot,
   loading,
@@ -54,14 +89,17 @@ export function PipelineView({
 
   if (!snapshot?.configured)
     return (
-      <div className="panel empty-state setup-empty">
-        <h2>Watch a publication pipeline</h2>
-        <p>
-          Point this at a pipeline checkout to see its editions, publication checks, per-source
-          health, and model-route usage. The pipeline keeps running on its own schedule; this is a
-          read-only view of what it wrote.
-        </p>
-        <button className="button button-primary" onClick={onSetup}>Open settings</button>
+      <div className={styles.root}>
+        <div className="panel empty-state setup-empty">
+          <h2>Watch a publication pipeline</h2>
+          <p>
+            Point this at a pipeline checkout to see its editions, publication checks, per-source
+            health, and model-route usage. The pipeline keeps running on its own schedule; this is a
+            read-only view of what it wrote.
+          </p>
+          <button className="button button-primary" onClick={onSetup}>Open settings</button>
+        </div>
+        <DashboardUsage usage={snapshot?.dashboardUsage} />
       </div>
     );
 
@@ -287,6 +325,7 @@ export function PipelineView({
               </p>
             </div>
           ) : <p className={styles.empty}>No model-gateway receipts for {snapshot.day} yet.</p>}
+          <DashboardUsage usage={snapshot.dashboardUsage} />
         </div>
       )}
     </div>

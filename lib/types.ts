@@ -181,6 +181,14 @@ export type PipelineSnapshot = {
   preflight?: { ok: boolean; reachable: boolean; checkedAt?: string; routes: PipelineRoutePreflight[] };
   usage?: PipelineUsage;
   radar?: { counts: Record<string, number>; enabled: number; disabled: number };
+  /** This dashboard's own model calls, recorded locally rather than read from the pipeline. */
+  dashboardUsage?: {
+    since: string;
+    calls: number;
+    ok: number;
+    failed: number;
+    rows: { provider: string; model: string; job: string; calls: number; ok: number; failed: number; averageLatencyMs: number }[];
+  };
   profile?: { lanes: string[]; painPoints: string[]; weights: Record<string, number> };
 };
 

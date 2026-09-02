@@ -89,6 +89,7 @@ export async function curateIndustryWithAi(
   }
   const allowedIds = new Set(bounded.map((candidate) => candidate.discoveryId));
   const result = runConfiguredAi(settings, {
+      job: "industry-rerank",
     maxOutputTokens: 5_000,
     prompt: [
       "You curate a small daily industry briefing from already-discovered public items.",

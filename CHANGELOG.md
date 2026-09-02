@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added local model-usage accounting. Every background AI call now records its job, provider, model, outcome, and latency, so a provider that quietly stopped answering is visible instead of looking like a quiet day in the results. The last seven days appear in the Pipeline view, grouped by job; history is kept for thirty days. Recording is best-effort and never fails a curation run.
+
 - Added a Pipeline view: a read-only operator surface over a publication pipeline running on this machine. It shows whether today's edition published, which publication checks passed, per-source health with the reason each source was quarantined, scheduler attempts with exit codes, the model routes a preflight found healthy, and per-route model usage including calls that failed over. Reads are confined to the configured directory, and a symbolic link pointing out of it is refused rather than followed.
 
 - Added a private model gateway provider. Background curation, mention summaries, and newsletter extraction can now run against an OpenAI-compatible gateway on your own network, selecting a route by the job it does rather than naming a vendor model. Gateway addresses are restricted to private networks, redirects are refused, and an upstream authentication failure returned as a successful completion is rejected instead of becoming curated content.
