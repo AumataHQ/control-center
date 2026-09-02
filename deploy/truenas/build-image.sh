@@ -9,8 +9,10 @@ set -euo pipefail
 host="${TRUENAS_SSH_HOST:-truenas}"
 ref="${1:-HEAD}"
 sha="$(git rev-parse --short "$ref")"
-if [ -n "$(git status --porcelain)" ] && [ "$ref" = "HEAD" ]; then
-  echo "Working tree is dirty. Commit first, or pass an explicit ref." >&2
+# Untracked files are not in `git archive` either, so only tracked edits matter.
+if [ -n "$(git status --porcelain --untracked-files=no)" ] && [ "$ref" = "HEAD" ]; then
+  echo "Tracked files have uncommitted edits, which the image would not contain." >&2
+  echo "Commit them first, or pass an explicit ref." >&2
   exit 1
 fi
 
