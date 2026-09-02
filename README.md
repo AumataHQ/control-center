@@ -110,6 +110,24 @@ The selected provider is used for bounded background jobs:
 
 Keys can instead be supplied as `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, or `XAI_API_KEY` in `.env.local`. Environment keys are still inert until the matching provider is selected in Settings. Cloud calls can incur usage charges. Saved keys remain in the local server-side settings file, never return through the Settings API, and are not sent to any unselected provider.
 
+### Private model gateway
+
+**Private model gateway** points curation at an OpenAI-compatible server on your own
+network instead of a metered provider. Its model list is whatever routes that gateway
+publishes, and a route names a job rather than a vendor model, so the gateway decides
+what actually answers. Cost is whatever the gateway already costs rather than per token.
+
+The address must be on a private network: loopback, `10.x`, `172.16–31.x`, `192.168.x`,
+`100.64–127.x`, an IPv6 unique-local address, or a private hostname. Public addresses
+are refused, redirects are refused, and responses are size-capped. A gateway fronting a
+subscription session can answer `200` with the provider's authentication error as the
+completion body; that is detected and refused rather than saved as a summary or a
+ranked story. Live web research is not offered here, because those routes carry their
+own tool contracts this dashboard does not drive.
+
+`SS_LLM_BASE`/`SS_HERMES_BASE` and `SS_LLM_API_KEY`/`SS_HERMES_API_KEY` are read from
+the environment when set, so one machine can serve both this dashboard and a pipeline.
+
 ### Local models
 
 Start the local server in LM Studio or Ollama and load a text model there first. Choose that provider in Control Center, use the default loopback endpoint or enter its local port, then select **Reload models**. Control Center does not install, download, or load models. An optional token is supported if your local server requires one; most local setups do not need a key. Ollama cloud models are not listed, and `OLLAMA_API_KEY` is deliberately not used as a local credential.
@@ -144,6 +162,29 @@ The requested scope is Gmail read-only. The app never sends, labels, deletes, ma
 
 Google classifies `gmail.readonly` as a restricted scope. A personal OAuth project left in External/Testing mode can require periodic reauthorization; production distribution of shared OAuth credentials requires Google verification. This project intentionally uses bring-your-own OAuth credentials rather than shipping a universal secret.
 
+## Pipeline
+
+An optional read-only view of a publication pipeline running on this machine. Point
+**Settings → Pipeline** at the checkout and the tab reports whether today's edition
+published, which publication checks passed or failed and why, which sources were
+quarantined with the reason each gave, what the scheduler attempted and with what exit
+code, which model routes a preflight found healthy, and what the day's model calls cost
+per route — including calls that failed over, which a published edition cannot show
+because it records only the model that finally answered.
+
+It is strictly an observer. It does not run the pipeline, publish anything, or edit the
+watchlist: editing sources stays with the pipeline's own format-preserving writer so its
+commit trail remains the record of what changed. The watchlist and ranking profile are
+summarized rather than parsed, so no configuration is ever rewritten from a guess.
+
+Reads are confined to the configured directory. Traversal is refused, files are size
+capped, and a symbolic link pointing out of the directory is refused rather than
+followed. A missing or unreadable directory is reported rather than failing the page.
+
+The same view also shows this dashboard's own model calls for the last seven days,
+grouped by job, since curation and newsletter extraction run here rather than in the
+pipeline.
+
 ## Local data and privacy
 
 The server binds to `127.0.0.1` and rejects API requests with foreign Host or Origin headers. Do not expose it through a network proxy without adding authentication.
@@ -161,7 +202,7 @@ Existing installations that already contain `./.control-center` continue using t
 Stored files include:
 
 - `settings.json`: configuration, OAuth tokens, and any saved AI/provider keys, owner-readable on POSIX systems;
-- `control-center.sqlite`: raw Industry discoveries, saved collector snapshots, surfaced content, extracted newsletter issue/link metadata, archive state, reminders, and tasks;
+- `control-center.sqlite`: raw Industry discoveries, saved collector snapshots, surfaced content, extracted newsletter issue/link metadata, archive state, reminders, tasks, and a thirty-day record of background model calls (job, provider, model, outcome, latency — never prompts or responses);
 - snapshot JSON files: sitemap and audience baselines.
 
 Secrets never return through the Settings API. They remain local, but they are not encrypted at rest. Protect the operating-system account and any backups.
