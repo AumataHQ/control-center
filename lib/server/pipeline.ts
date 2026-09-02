@@ -37,7 +37,7 @@ export function resolveWithin(root: string, ...segments: string[]) {
   return target;
 }
 
-function readTextWithin(root: string, ...segments: string[]) {
+export function readTextWithin(root: string, ...segments: string[]) {
   const target = resolveWithin(root, ...segments);
   const info = statSync(target, { throwIfNoEntry: false });
   if (!info?.isFile() || info.size > MAX_BYTES) return "";
@@ -56,7 +56,7 @@ function readTextWithin(root: string, ...segments: string[]) {
   return readFileSync(real, "utf8");
 }
 
-function readJsonWithin<T>(root: string, ...segments: string[]): T | undefined {
+export function readJsonWithin<T>(root: string, ...segments: string[]): T | undefined {
   try {
     const raw = readTextWithin(root, ...segments);
     return raw ? (JSON.parse(raw) as T) : undefined;
@@ -65,7 +65,7 @@ function readJsonWithin<T>(root: string, ...segments: string[]): T | undefined {
   }
 }
 
-function listDirectory(root: string, ...segments: string[]) {
+export function listDirectory(root: string, ...segments: string[]) {
   try {
     return readdirSync(resolveWithin(root, ...segments), { withFileTypes: true });
   } catch {

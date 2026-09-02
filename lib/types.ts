@@ -206,6 +206,78 @@ export type PipelineSnapshot = {
   profile?: { lanes: string[]; painPoints: string[]; weights: Record<string, number> };
 };
 
+/**
+ * The newsroom: what the publication considered on a given day, and what became
+ * of each candidate. The pipeline records this on every run, published or not.
+ */
+export type NewsroomDisposition = "selected" | "quarantined" | "also_noted";
+
+export type NewsroomFetch = {
+  /** The link that was fetched on this candidate's behalf. */
+  url: string;
+  ok: boolean;
+  error?: string;
+};
+
+export type NewsroomCandidate = {
+  candidateId: string;
+  source: string;
+  title: string;
+  url: string;
+  score: number;
+  disposition: NewsroomDisposition;
+  /** Why it was withheld, when it was. */
+  reason?: string;
+  mergedCount: number;
+  mergedSources: string[];
+  /** First-party sources that were verified, for a candidate that was kept. */
+  primaryUrls: string[];
+  /** Every fetch attempted for this candidate, joined from the research receipt. */
+  fetches: NewsroomFetch[];
+  /** The headline it was published under, when it reached the page. */
+  headline?: string;
+};
+
+export type NewsroomSourceTally = {
+  source: string;
+  considered: number;
+  selected: number;
+  quarantined: number;
+  alsoNoted: number;
+};
+
+export type NewsroomSnapshot = {
+  configured: boolean;
+  rootReadable: boolean;
+  day: string;
+  error?: string;
+  /** False when no brief artifact exists for this day at all. */
+  available: boolean;
+  /**
+   * True when the day carries a recorded trail. Editions written before the
+   * trail existed are reconstructed from what their artifact does hold, which
+   * is less than the whole picture — the UI must not present the two as equal.
+   */
+  complete: boolean;
+  generatedAt?: string;
+  writer?: string;
+  writerModel?: string;
+  publicationState?: string;
+  reason?: string;
+  counts: {
+    considered: number;
+    selected: number;
+    quarantined: number;
+    alsoNoted: number;
+    published: number;
+  };
+  research?: { attempted: number; succeeded: number; failed: number };
+  tallies: NewsroomSourceTally[];
+  candidates: NewsroomCandidate[];
+  /** Days with a readable brief artifact, newest first. */
+  days: string[];
+};
+
 export type SettingsUpdate = Omit<
   PublicSettings,
   "newsletters" | "audience" | "industry" | "mentions" | "ai"

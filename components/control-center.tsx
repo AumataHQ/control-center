@@ -21,6 +21,7 @@ import {
   LayoutDashboard,
   Link2,
   ListTodo,
+  Library,
   Mail,
   Menu,
   MessageSquare,
@@ -41,6 +42,7 @@ import {
   } from "lucide-react";
 import type {
   AudienceMetric,
+  NewsroomSnapshot,
   PipelineSnapshot,
   AudiencePlatform,
   DailyBriefItem,
@@ -66,6 +68,7 @@ import { } from "@/components/ai-provider-settings";
 import { DailySnapshot } from "@/components/daily-snapshot";
 import { AudienceInsights } from "@/components/audience-insights";
 import { PipelineView } from "@/components/pipeline-view";
+import { NewsroomView } from "@/components/newsroom-view";
 import { SettingsView, type SettingsSection } from "@/components/settings-view";
 import {
   classNames,
@@ -108,6 +111,7 @@ type Tab =
   | "newsletters"
   | "tasks"
   | "pipeline"
+  | "newsroom"
   | "settings";
 type Reminder = ReminderItem;
 type Task = TaskItem;
@@ -159,6 +163,7 @@ const nav: { id: Tab; label: string; icon: typeof Activity }[] = [
   { id: "newsletters", label: "Newsletters", icon: Newspaper },
   { id: "tasks", label: "Tasks", icon: ListTodo },
   { id: "pipeline", label: "Pipeline", icon: Network },
+  { id: "newsroom", label: "Newsroom", icon: Library },
 ];
 
 function briefDueLabel(value?: string) {
@@ -1864,6 +1869,29 @@ function PipelineTab({ openSettings }: { openSettings: () => void }) {
   );
 }
 
+function NewsroomTab({ openSettings }: { openSettings: () => void }) {
+  // The day being read is part of the request, so it belongs in the key rather
+  // than in a filter applied after the fact: picking an older day must fetch
+  // that day's artifacts, not sift through today's.
+  const [day, setDay] = useState("");
+  const { data, loading, error, refresh } = useLiveData<NewsroomSnapshot>(
+    day ? `/api/newsroom?day=${encodeURIComponent(day)}` : "/api/newsroom",
+    5 * 60 * 1000,
+  );
+  if (error && !data) return <LiveLoadError error={error} retry={refresh} />;
+  if (loading && !data) return <LoadingPanel />;
+  return (
+    <NewsroomView
+      snapshot={data}
+      loading={loading}
+      day={day || data?.day || ""}
+      onDay={setDay}
+      onRefresh={refresh}
+      onSetup={openSettings}
+    />
+  );
+}
+
 export function ControlCenter() {
   const [activeTab, setActiveTab] = useState<Tab>("today");
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -2261,6 +2289,9 @@ export function ControlCenter() {
         {activeTab === "tasks" && (
           <TasksView tasks={tasks} setTasks={setTasks} />
         )}{" "}
+        {activeTab === "newsroom" && (
+          <NewsroomTab openSettings={() => openSettings("pipeline")} />
+        )}
         {activeTab === "pipeline" && (
           <PipelineTab openSettings={() => openSettings("pipeline")} />
         )}{" "}
