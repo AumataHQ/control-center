@@ -10,7 +10,25 @@ Please use GitHub's private **Report a vulnerability** flow for this repository.
 
 ## Local security model
 
-Control Center is designed to run on one trusted user's computer. It binds to loopback and rejects foreign API Host/Origin headers, but it has no account login. Do not expose it to a LAN or the public internet without an authenticated reverse proxy and a separate security review.
+Control Center is designed for one trusted operator and has no account login. By default
+it binds to loopback and rejects foreign API Host/Origin headers.
+
+`CONTROL_CENTER_HOST` allows binding to one non-loopback address, and
+`CONTROL_CENTER_ALLOWED_HOSTS` names the additional hostnames the API answers on. These
+exist for a private network the operator controls — a tailnet, typically. Understand what
+each one does: the bind address is the access boundary, because only traffic that can
+reach that address reaches the app. The host allowlist defends against DNS rebinding,
+where a page you visit points a hostname at the app's address; the browser then sends the
+attacker's hostname in `Host` and the request is refused. It is not a defence against a
+direct request from a host already on the network, which can set any `Host` header. For
+that reason binding to `0.0.0.0` or `::` is refused unless
+`CONTROL_CENTER_ALLOW_ANY_INTERFACE=1` asserts that something in front is doing the
+access control.
+
+Every device that can reach the bound address can read the entire dashboard, including
+stored newsletter content and the editorial trail. Do not expose it to a LAN you do not
+control, or to the public internet, without an authenticated reverse proxy and a separate
+security review.
 
 OAuth credentials, optional audience-provider tokens, and optional AI provider keys are stored in the local data directory and are not encrypted at rest. They are written owner-readable on POSIX systems and are never returned by the public Settings response. Protect the operating-system account and treat full backups as secret-bearing files.
 

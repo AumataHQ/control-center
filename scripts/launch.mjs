@@ -22,6 +22,25 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) {
   process.exit(1);
 }
 
+const bindHost = (process.env.CONTROL_CENTER_HOST || "127.0.0.1").trim();
+if (
+  ["0.0.0.0", "::", "[::]"].includes(bindHost) &&
+  process.env.CONTROL_CENTER_ALLOW_ANY_INTERFACE !== "1"
+) {
+  console.error(
+    `Refusing to bind Control Center to ${bindHost}. It has no login of its own, so\n` +
+      "every interface it listens on is a way to read the whole dashboard. Bind it to\n" +
+      "one address instead — a Tailscale address, for example:\n\n" +
+      "  CONTROL_CENTER_HOST=100.x.y.z npm run launch\n\n" +
+      "Set CONTROL_CENTER_ALLOW_ANY_INTERFACE=1 only if something else is doing the\n" +
+      "access control in front of it.",
+  );
+  process.exit(1);
+}
+const reachableHost = ["0.0.0.0", "::", "[::]"].includes(bindHost)
+  ? "127.0.0.1"
+  : bindHost;
+
 let child;
 let forceStopTimer;
 let stopping = false;
@@ -59,7 +78,11 @@ const dataDirectory = resolveDataDirectory(cwd);
 await mkdir(dataDirectory, { recursive: true, mode: 0o700 });
 process.env.CONTROL_CENTER_DATA_DIR = dataDirectory;
 process.env.PORT = String(port);
-const url = `http://127.0.0.1:${port}`;
+const url = `http://${
+  reachableHost.includes(":") && !reachableHost.startsWith("[")
+    ? `[${reachableHost}]`
+    : reachableHost
+}:${port}`;
 
 async function isControlCenterRunning() {
   try {
@@ -184,7 +207,7 @@ async function cleanup() {
 const nextCli = path.join(cwd, "node_modules", "next", "dist", "bin", "next");
 child = spawn(
   process.execPath,
-  [nextCli, "start", "--hostname", "127.0.0.1", "--port", String(port)],
+  [nextCli, "start", "--hostname", bindHost, "--port", String(port)],
   {
     cwd,
     env: process.env,

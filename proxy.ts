@@ -1,14 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-
-const loopbackHosts = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
-
-function isLoopback(value: string) {
-  try {
-    return loopbackHosts.has(new URL(value).hostname.toLowerCase());
-  } catch {
-    return false;
-  }
-}
+import { configuredHosts, isAllowedHost } from "./lib/allowed-hosts";
 
 function isSameOrigin(value: string, request: NextRequest) {
   try {
@@ -22,9 +13,14 @@ function isSameOrigin(value: string, request: NextRequest) {
 
 export function proxy(request: NextRequest) {
   const host = request.headers.get("host") || "";
-  if (!isLoopback(`http://${host}`)) {
+  const allowed = configuredHosts();
+  if (!isAllowedHost(host, allowed)) {
     return NextResponse.json(
-      { error: "Control Center only accepts requests from this computer." },
+      {
+        error: allowed.size
+          ? "Control Center does not answer on that hostname."
+          : "Control Center only accepts requests from this computer.",
+      },
       { status: 403 },
     );
   }

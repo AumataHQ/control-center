@@ -187,7 +187,29 @@ pipeline.
 
 ## Local data and privacy
 
-The server binds to `127.0.0.1` and rejects API requests with foreign Host or Origin headers. Do not expose it through a network proxy without adding authentication.
+By default the server binds to `127.0.0.1` and rejects API requests with foreign Host
+or Origin headers. Control Center has no login of its own, so the address it listens on
+is the whole of its access control.
+
+To reach it from another machine on a private network — a tailnet, say — bind it to that
+one address and name the hostnames it should answer on:
+
+```bash
+CONTROL_CENTER_HOST=100.x.y.z \
+CONTROL_CENTER_ALLOWED_HOSTS=100.x.y.z,truenas.tailnet.ts.net \
+npm run launch
+```
+
+`CONTROL_CENTER_HOST` is the real boundary: only traffic that can reach that address can
+reach the app at all. `CONTROL_CENTER_ALLOWED_HOSTS` is a second, narrower control — it
+stops a web page you visit from driving your browser into the dashboard through a
+rebinding attack, because the browser sends the attacker's hostname in `Host`. It does
+not stop a direct request from anything already on the network, which can send whatever
+`Host` header it likes. Binding to `0.0.0.0` is refused for that reason unless
+`CONTROL_CENTER_ALLOW_ANY_INTERFACE=1` says something else is doing the access control.
+
+Do not expose it to a LAN you do not control, or to the public internet, without an
+authenticated reverse proxy.
 
 Fresh installs store durable data outside the application folder:
 
