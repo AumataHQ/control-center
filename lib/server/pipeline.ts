@@ -76,9 +76,17 @@ function metaContent(html: string, name: string) {
   return match?.[1]?.trim() || undefined;
 }
 
+/** Strip a site-name prefix so the list reads as titles, not repeated branding. */
+function cleanTitle(value: string) {
+  return value
+    .replace(/\s+/g, " ")
+    .replace(/^[A-Za-z][\w .]{0,40}?\s*[\u2014\u2013|:-]\s+/, "")
+    .trim();
+}
+
 function titleOf(html: string) {
   const match = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-  return match?.[1]?.replace(/\s+/g, " ").replace(/^SignalScribe\s*[—|-]\s*/i, "").trim();
+  return match?.[1] ? cleanTitle(match[1]) : undefined;
 }
 
 export function readEditions(root: string, today: string): PipelineEdition[] {
@@ -89,7 +97,7 @@ export function readEditions(root: string, today: string): PipelineEdition[] {
     const heading = readTextWithin(root, "briefs", entry.name).match(/^#\s+(.+)$/m)?.[1];
     editions.set(day, {
       date: day,
-      title: heading?.trim() || "Daily intelligence brief",
+      title: (heading ? cleanTitle(heading) : "") || "Daily intelligence brief",
       format: "markdown",
       isToday: day === today,
     });

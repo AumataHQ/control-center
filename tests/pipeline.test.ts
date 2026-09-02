@@ -207,3 +207,18 @@ test("the pipeline day follows the publication timezone, not the server's", asyn
   assert.equal(pipelineDay(new Date("2026-08-15T03:30:00Z")), "2026-08-14");
   assert.equal(pipelineDay(new Date("2026-08-15T13:30:00Z")), "2026-08-15");
 });
+
+test("edition titles drop a repeated site-name prefix in either dash style", async () => {
+  const { root, write } = fixture();
+  const { readEditions } = await import("../lib/server/pipeline");
+  write("briefs/2026-08-03.md", "# SignalScribe – 2026-08-03\n\nbody\n");
+  write("briefs/2026-08-04.md", "# SignalScribe — Tuesday's AI brief\n\nbody\n");
+  write("briefs/2026-08-05.md", "# Wednesday's AI brief\n\nbody\n");
+  write("site/2026-08-06/index.html", "<html><head><title>SignalScribe: Thursday roundup</title></head><body>x</body></html>");
+  const byDate = Object.fromEntries(readEditions(root, "2026-08-06").map((e) => [e.date, e.title]));
+  assert.equal(byDate["2026-08-03"], "2026-08-03");
+  assert.equal(byDate["2026-08-04"], "Tuesday's AI brief");
+  // A title with no prefix is left alone, including its own hyphens.
+  assert.equal(byDate["2026-08-05"], "Wednesday's AI brief");
+  assert.equal(byDate["2026-08-06"], "Thursday roundup");
+});
