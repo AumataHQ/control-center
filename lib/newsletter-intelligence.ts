@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { AiKeyProvider, NewsletterFeedResponse, NewsletterSourceLink, NewsletterTopic } from "./types";
 import { boundedPriority, newsletterPriority, sortFeedStories } from "./feed-priority";
+import { EMAIL_TRACKING_PARAMETERS, trackingParameterMatcher } from "./tracking-parameters";
 
 export type GmailMessagePart = {
   mimeType?: string;
@@ -107,20 +108,7 @@ export type NewsletterMentionRecord = {
   curationMode?: "local" | AiKeyProvider;
 };
 
-const trackingParameters = new Set([
-  "_bhlid",
-  "_hsenc",
-  "_hsmi",
-  "fbclid",
-  "gclid",
-  "mc_cid",
-  "mc_eid",
-  "mkt_tok",
-  "ref_src",
-  "s",
-  "vero_conv",
-  "vero_id",
-]);
+const isTrackingParameter = trackingParameterMatcher(EMAIL_TRACKING_PARAMETERS);
 
 
 const titleStopWords = new Set([
@@ -216,8 +204,7 @@ export function canonicalizeNewsletterUrl(value: string) {
     url.hash = "";
     url.hostname = normalizedHost(url.hostname);
     for (const key of [...url.searchParams.keys()]) {
-      if (key.toLowerCase().startsWith("utm_") || trackingParameters.has(key.toLowerCase()))
-        url.searchParams.delete(key);
+      if (isTrackingParameter(key)) url.searchParams.delete(key);
     }
     url.searchParams.sort();
     if (url.pathname !== "/") url.pathname = url.pathname.replace(/\/+$/, "");

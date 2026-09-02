@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import type { LiveStory } from "@/lib/types";
+import { SEARCH_TRACKING_PARAMETERS, trackingParameterMatcher } from "./tracking-parameters";
 
 export const DEFAULT_MENTION_WINDOW_DAYS = 7;
 export const DEFAULT_FUTURE_TOLERANCE_HOURS = 24;
@@ -223,7 +224,7 @@ export function buildMentionQuery(primary: string, signals: string[], strictMode
   return buildMentionQueries(primary, { identitySignals: signals, strictMode })[0] ?? "";
 }
 
-const trackingParameter = /^(?:utm_.+|fbclid|gclid|dclid|msclkid|mc_cid|mc_eid|ref|referrer|source|campaign|campaign_id|oc|hl|gl|ceid)$/i;
+const isTrackingParameter = trackingParameterMatcher(SEARCH_TRACKING_PARAMETERS);
 
 function isBingHost(hostname: string) {
   return hostname === "bing.com" || hostname.endsWith(".bing.com");
@@ -245,7 +246,7 @@ function canonicalizeUrl(value: string, depth: number): string {
 
   url.hash = "";
   for (const key of [...url.searchParams.keys()]) {
-    if (trackingParameter.test(key)) url.searchParams.delete(key);
+    if (isTrackingParameter(key)) url.searchParams.delete(key);
   }
   const parameters = [...url.searchParams.entries()].sort(([leftKey, leftValue], [rightKey, rightValue]) =>
     leftKey.localeCompare(rightKey) || leftValue.localeCompare(rightValue));

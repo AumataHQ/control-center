@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { SEARCH_TRACKING_PARAMETERS, trackingParameterMatcher } from "./tracking-parameters";
 
 export const DEFAULT_INDUSTRY_SELECTION_LIMIT = 30;
 export const DEFAULT_INDUSTRY_MINIMUM_SCORE = 50;
@@ -69,7 +70,9 @@ const providerWrapperHosts = new Set([
   "bing.com",
 ]);
 
-const trackingParameters = /^(?:utm_.+|fbclid|gclid|dclid|msclkid|mc_cid|mc_eid|ref|referrer|source|campaign)$/i;
+const isTrackingParameter = trackingParameterMatcher(
+  SEARCH_TRACKING_PARAMETERS.filter((name) => !["campaign_id", "ceid", "gl", "hl", "oc"].includes(name)),
+);
 const materialChangePattern = /\b(?:acquir(?:e|es|ed|ing|ition)|announce(?:s|d|ment)?|approval|breach|expand(?:s|ed|ing)?|funding|invest(?:s|ed|ment)|launch(?:es|ed|ing)?|law|lawsuit|merg(?:e|es|ed|er)|open(?:s|ed|ing)|partnership|patent|policy|recall|regulation|release(?:s|d)?|report|research|security|standard|study|unveil(?:s|ed)?|update(?:s|d)?|upgrade(?:s|d)?)\b/i;
 const evergreenPattern = /\b(?:beginner(?:'s)? guide|explainer|how to|podcast|tips|tutorial|webinar)\b/i;
 const routinePathPattern = /\/(?:author|authors|category|categories|contact|cookie-policy|legal|login|page|privacy|search|sign-in|tag|tags|terms)(?:\/|$)/i;
@@ -146,7 +149,7 @@ export function canonicalizeIndustryUrl(value: string | undefined) {
     url.hostname = url.hostname.toLocaleLowerCase("en-US").replace(/^www\./, "");
     if ((url.protocol === "https:" && url.port === "443") || (url.protocol === "http:" && url.port === "80")) url.port = "";
     for (const key of [...url.searchParams.keys()]) {
-      if (trackingParameters.test(key)) url.searchParams.delete(key);
+      if (isTrackingParameter(key)) url.searchParams.delete(key);
     }
     url.searchParams.sort();
     url.pathname = url.pathname.replace(/\/{2,}/g, "/");
