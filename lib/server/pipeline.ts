@@ -131,6 +131,8 @@ export function readEditions(root: string, today: string): PipelineEdition[] {
 
 type StatusFile = {
   brief_date?: string;
+  date?: string;
+  ready?: boolean;
   writer_model?: string;
   checks?: { name?: string; ok?: boolean; detail?: string; message?: string }[];
 };
@@ -148,8 +150,9 @@ export function readPublication(root: string, day: string) {
     }))
     .slice(0, 200);
   return {
-    day: status.brief_date,
+    day: status.brief_date || status.date,
     writerModel: status.writer_model,
+    ready: status.ready === true,
     checks,
     passed: checks.filter((check) => check.ok).length,
     failed: checks.filter((check) => !check.ok).length,

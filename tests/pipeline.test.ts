@@ -222,3 +222,30 @@ test("edition titles drop a repeated site-name prefix in either dash style", asy
   assert.equal(byDate["2026-08-05"], "Wednesday's AI brief");
   assert.equal(byDate["2026-08-06"], "Thursday roundup");
 });
+
+test("an edition on disk is not reported as published", async () => {
+  const { readPublication } = await import("../lib/server/pipeline");
+  const { root, write } = fixture();
+  // A markdown file in briefs/ only proves something was assembled here. Local
+  // test runs write there, and reporting that as published would tell an
+  // operator readers had an edition they never received.
+  write("briefs/2026-08-14.md", "# Today's brief\n\nbody\n");
+  assert.equal(readPublication(root, "2026-08-14"), undefined);
+
+  write("site/2026-08-14/status.json", JSON.stringify({
+    date: "2026-08-14", ready: true, writer_model: "signalscribe-reporter",
+    checks: [{ name: "brief.writer", ok: true }],
+  }));
+  const publication = readPublication(root, "2026-08-14");
+  assert.equal(publication?.ready, true);
+  assert.equal(publication?.day, "2026-08-14");
+});
+
+test("a receipt that is not ready does not count as published", async () => {
+  const { readPublication } = await import("../lib/server/pipeline");
+  const { root, write } = fixture();
+  write("site/status.json", JSON.stringify({
+    date: "2026-08-14", ready: false, checks: [{ name: "x.items", ok: false }],
+  }));
+  assert.equal(readPublication(root, "2026-08-14")?.ready, false);
+});

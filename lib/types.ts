@@ -184,6 +184,7 @@ export type PipelineSnapshot = {
   latestEdition?: PipelineEdition;
   publication?: {
     day?: string;
+    ready?: boolean;
     writerModel?: string;
     checks: PipelineCheck[];
     passed: number;

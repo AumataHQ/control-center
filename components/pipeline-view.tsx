@@ -190,7 +190,11 @@ export function PipelineView({
     );
 
   const { publication, run, usage, preflight, sources, editions, latestEdition, radar, profile, publicUrl } = snapshot;
-  const publishedToday = latestEdition?.date === snapshot.day;
+  // An edition file on disk only proves something was assembled here. The
+  // publication receipt is what proves it reached readers, so a local markdown
+  // artifact must never be reported as published.
+  const assembledToday = latestEdition?.date === snapshot.day;
+  const publishedToday = publication?.ready === true && publication.day === snapshot.day;
   const failedSources = sources.filter((source) => source.state !== "ok");
 
   return (
@@ -208,9 +212,15 @@ export function PipelineView({
       <div className={styles.headline}>
         <Tile
           label="Today's edition"
-          value={publishedToday ? "Published" : "Not yet"}
+          value={publishedToday ? "Published" : assembledToday ? "Assembled" : "Not yet"}
           tone={publishedToday ? "good" : "bad"}
-          detail={latestEdition ? `Latest ${latestEdition.date}` : "No editions found"}
+          detail={
+            publishedToday
+              ? `Verified ${snapshot.day}`
+              : assembledToday
+                ? "Built locally, no publication receipt"
+                : latestEdition ? `Latest ${latestEdition.date}` : "No editions found"
+          }
         />
         <Tile
           label="Publication checks"
