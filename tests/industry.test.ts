@@ -23,6 +23,7 @@ import {
 } from "../lib/industry-store";
 import { discoveredFeedLinks, isFeedDocument } from "../lib/feed-discovery";
 import {
+  feedIsTrusted,
   filterSitemapEntriesForSource,
   isUrlWithinSourcePath,
   newSitemapEntries,
@@ -742,4 +743,22 @@ test("industry discovery store prunes expired raw discoveries without touching c
     ["current"],
   );
   database.close();
+});
+
+test("a feed the publisher pointed us at is not filtered by the configured path", () => {
+  const source = "https://example.com/news";
+
+  // OpenAI's news feed is at /news/rss.xml and every one of its 1,163 articles
+  // is under /index/. Filtering by path discarded the entire feed.
+  assert.equal(feedIsTrusted("https://example.com/news/rss.xml", "https://example.com/news/rss.xml", source, false), true);
+
+  // blog.google/technology/ai/rss redirects to /innovation-and-ai/technology/ai/rss/.
+  assert.equal(feedIsTrusted("https://example.com/news/rss", "https://example.com/moved/news/rss", source, false), true);
+
+  // A feed the page declared is authoritative wherever it lives.
+  assert.equal(feedIsTrusted("https://example.com/elsewhere.xml", "https://example.com/elsewhere.xml", source, true), true);
+
+  // A feed merely guessed at the origin might be the whole site's, so the
+  // configured path remains the best guide to what belongs.
+  assert.equal(feedIsTrusted("https://example.com/feed", "https://example.com/feed", source, false), false);
 });

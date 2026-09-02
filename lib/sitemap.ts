@@ -173,6 +173,40 @@ export function isUrlWithinSourcePath(candidateUrl: string, sourceUrl: string) {
   }
 }
 
+/**
+ * Whether a feed's entries should be taken as-is, without path filtering.
+ *
+ * Three ways a feed earns that, all of them the publisher having already said
+ * what the feed is for.
+ *
+ * The page declared it in `<link rel="alternate">` — the site saying "this is
+ * my feed", which filtering by the page's path second-guesses.
+ *
+ * We asked for it under the configured path. `blog.google/technology/ai/rss`
+ * redirects to `/innovation-and-ai/technology/ai/rss/`: the site reorganised,
+ * which changes the address and not the meaning.
+ *
+ * Or it answered under the configured path. A feed at `/news/rss.xml` *is* the
+ * news feed, and where it hosts its articles is its own business — OpenAI's
+ * news feed carries 1,163 entries, every one of them under `/index/`, so a
+ * source configured as openai.com/news used to collect nothing at all.
+ *
+ * A feed merely guessed at the origin earns none of these and is still
+ * filtered: it may be the whole site's feed rather than this section's.
+ */
+export function feedIsTrusted(
+  candidate: string,
+  endpoint: string,
+  sourceUrl: string,
+  declared: boolean,
+) {
+  return (
+    declared ||
+    isUrlWithinSourcePath(candidate, sourceUrl) ||
+    (!!endpoint && isUrlWithinSourcePath(endpoint, sourceUrl))
+  );
+}
+
 export function filterSitemapEntriesForSource(entries: SitemapUrl[], sourceUrl: string) {
   return sourceContentPath(sourceUrl) ? entries.filter((entry) => isUrlWithinSourcePath(entry.loc, sourceUrl)) : entries;
 }

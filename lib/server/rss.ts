@@ -11,6 +11,7 @@ import {
   FEED_MAX_RESPONSE_BYTES,
   SITEMAP_MAX_RESPONSE_BYTES,
   filterSitemapEntriesForSource,
+  feedIsTrusted,
   isUrlWithinSourcePath,
   newSitemapEntries,
   nextSitemapSnapshotUrls,
@@ -45,7 +46,8 @@ function normalizedHost(value: string) {
   return value.toLowerCase().replace(/^www\./, "");
 }
 
-function feedItemsInSourcePath(items: LiveStory[], sourceUrl: string) {
+function feedItemsInSourcePath(items: LiveStory[], sourceUrl: string, trusted = false) {
+  if (trusted) return items;
   const scope = sourceContentPath(sourceUrl);
   if (!scope) return items;
   const source = new URL(sourceUrl);
@@ -77,11 +79,22 @@ function feedCandidates(input: URL) {
   ]);
 }
 
-async function firstFeed(candidates: string[], sourceName: string, sourceUrl: string) {
+async function firstFeed(
+  candidates: string[],
+  sourceName: string,
+  sourceUrl: string,
+  declared: string[] = [],
+) {
+  const declaredSet = new Set(declared);
   const attempts = await Promise.allSettled(unique(candidates).map(async (candidate) => {
     const response = await safeFetchText(candidate, { maxBytes: FEED_MAX_RESPONSE_BYTES });
     if (!isFeedDocument(response.text)) throw new Error("Not a feed");
-    const items = feedItemsInSourcePath(parseFeed(response.text, sourceName, response.finalUrl), sourceUrl);
+    const trusted = feedIsTrusted(candidate, response.finalUrl, sourceUrl, declaredSet.has(candidate));
+    const items = feedItemsInSourcePath(
+      parseFeed(response.text, sourceName, response.finalUrl),
+      sourceUrl,
+      trusted,
+    );
     return { endpoint: response.finalUrl, items };
   }));
   let emptyFeed: { endpoint: string; items: LiveStory[] } | null = null;
@@ -205,10 +218,13 @@ export async function readSource(source: IndustrySource, previous?: SitemapSnaps
     return feedReadResult(source, sourceName, homepage.finalUrl, items, previous);
   }
 
-  const feed = await firstFeed([
-    ...(homepage ? discoveredFeedLinks(homepage.text, homepage.finalUrl) : []),
-    ...feedCandidates(input),
-  ], sourceName, input.toString());
+  const declared = homepage ? discoveredFeedLinks(homepage.text, homepage.finalUrl) : [];
+  const feed = await firstFeed(
+    [...declared, ...feedCandidates(input)],
+    sourceName,
+    input.toString(),
+    declared,
+  );
   if (feed) {
     const result = feedReadResult(source, sourceName, feed.endpoint, feed.items, previous);
     if (homepageError) result.status.message += "; homepage access was not required";
