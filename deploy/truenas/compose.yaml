@@ -26,6 +26,34 @@ services:
       retries: 5
       start_period: 20s
 
+  # Pulls the publication pipeline's trail down from object storage into the
+  # directory the dashboard reads. `mc mirror` without --remove never deletes,
+  # which is deliberate: the newsroom is an archive of what the pipeline did,
+  # not a replica of its current working directory.
+  newsroom-mirror:
+    image: quay.io/minio/mc:RELEASE.2025-07-21T05-28-08Z
+    container_name: newsroom-mirror
+    restart: unless-stopped
+    depends_on:
+      minio:
+        condition: service_healthy
+    user: "1001:1001"
+    environment:
+      MC_HOST_newsroom: http://${NEWSROOM_S3_ACCESS_KEY_ID:?set NEWSROOM_S3_ACCESS_KEY_ID in .env}:${NEWSROOM_S3_SECRET_ACCESS_KEY:?set NEWSROOM_S3_SECRET_ACCESS_KEY in .env}@minio:9000
+      MC_CONFIG_DIR: /tmp/mc
+    volumes:
+      - ${NEWSROOM_ROOT}/pipeline:/pipeline
+    entrypoint:
+      - sh
+      - -c
+      - |
+        while true; do
+          mc mirror --overwrite --quiet \
+            "newsroom/${NEWSROOM_S3_BUCKET:-signalscribe-backups}/${NEWSROOM_S3_PREFIX:-newsroom}" /pipeline \
+            || echo "mirror pass failed, retrying next cycle"
+          sleep "${NEWSROOM_MIRROR_INTERVAL:-300}"
+        done
+
   control-center:
     image: ${CONTROL_CENTER_IMAGE:-control-center:local}
     container_name: newsroom-control-center
@@ -33,6 +61,8 @@ services:
     depends_on:
       minio:
         condition: service_healthy
+      newsroom-mirror:
+        condition: service_started
     environment:
       # The hostnames the API answers on. A request arriving with any other
       # Host is refused, which is what stops a page you visit from driving your
