@@ -13,6 +13,17 @@ export type LocalAiProvider = Extract<AiKeyProvider, "lmstudio" | "ollama">;
  * gateway resolves to an upstream session, so this dashboard never names a model.
  */
 export type GatewayAiProvider = Extract<AiKeyProvider, "gateway">;
+
+/** Background jobs that can be pinned to a specific model or gateway route. */
+export const AI_JOBS = [
+  "industry-rerank",
+  "mention-research",
+  "mention-summary",
+  "newsletter-extract",
+  "newsletter-consolidate",
+  "newsletter-priority",
+] as const;
+export type AiJob = (typeof AI_JOBS)[number];
 export type AiModelOption = {
   id: string;
   label: string;
@@ -84,6 +95,8 @@ export type PublicSettings = {
     model: string;
     localBaseUrls: Record<LocalAiProvider, string>;
     gatewayBaseUrl: string;
+    /** Per-job model override; an absent or empty entry uses the default model. */
+    jobModels: Partial<Record<AiJob, string>>;
     keySet: Record<AiKeyProvider, boolean>;
     keySource: Record<AiKeyProvider, "none" | "settings" | "environment">;
   };
@@ -212,6 +225,7 @@ export type SettingsUpdate = Omit<
     model: string;
     localBaseUrls?: Partial<Record<LocalAiProvider, string>>;
     gatewayBaseUrl?: string;
+    jobModels?: Partial<Record<AiJob, string>>;
     apiKeys?: Partial<Record<AiKeyProvider, string>>;
     clearKeys?: AiKeyProvider[];
   };

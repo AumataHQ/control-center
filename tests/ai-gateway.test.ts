@@ -42,6 +42,7 @@ function gatewaySettings(model = "", baseUrl = "http://100.64.0.1:8643/v1"): Sto
       apiKeys: { openai: "", anthropic: "", gemini: "", xai: "", gateway: "gateway-test-key", lmstudio: "", ollama: "" },
       localBaseUrls: { ...DEFAULT_LOCAL_AI_URLS },
       gatewayBaseUrl: baseUrl,
+      jobModels: {},
     },
     dailyBrief: { sourceLabels: [], lookbackDays: 7, sections: { industry: 5, mentions: 5, newsletters: 5 } },
     pipeline: { root: "", publicUrl: "" },
@@ -178,4 +179,40 @@ test("truncated model output is closed without inventing values", async () => {
   // Genuinely malformed input stays a failure.
   assert.equal(repairTruncatedJson("no json here"), undefined);
   assert.equal(repairTruncatedJson('{"a":]'), undefined);
+});
+
+test("a job pinned to its own route overrides the global model selection", async () => {
+  const { runConfiguredAi } = await import("../lib/server/ai");
+  const settings = gatewaySettings("signalscribe-reporter");
+  settings.ai.jobModels = { "newsletter-extract": "signalscribe-extract" };
+
+  const seen: string[] = [];
+  const respond = (async (_url: string, init?: RequestInit) => {
+    seen.push(JSON.parse(String(init?.body)).model);
+    return new Response(JSON.stringify({ choices: [{ message: { content: "done" } }] }), {
+      status: 200, headers: { "content-type": "application/json" },
+    });
+  }) as unknown as typeof fetch;
+
+  await withFetch(respond, async () => {
+    await runConfiguredAi(settings, { prompt: "extract", job: "newsletter-extract" });
+    await runConfiguredAi(settings, { prompt: "rank", job: "industry-rerank" });
+  });
+  // Only the pinned job diverges; everything else keeps the global selection.
+  assert.deepEqual(seen, ["signalscribe-extract", "signalscribe-reporter"]);
+});
+
+test("an unknown job or malformed model id is dropped rather than stored", async () => {
+  const { cleanJobModels } = await import("../lib/server/settings");
+  assert.deepEqual(
+    cleanJobModels({
+      "industry-rerank": "signalscribe-reporter",
+      "newsletter-extract": "   ",
+      "not-a-job": "signalscribe-reporter",
+      "mention-summary": "https://evil.example/model",
+    }),
+    { "industry-rerank": "signalscribe-reporter" },
+  );
+  assert.deepEqual(cleanJobModels(undefined), {});
+  assert.deepEqual(cleanJobModels("nonsense"), {});
 });

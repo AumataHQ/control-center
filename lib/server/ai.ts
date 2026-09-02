@@ -33,8 +33,11 @@ export class AiNotConfiguredError extends Error {
   }
 }
 
-async function modelFor(settings: StoredSettings, provider: AiKeyProvider): Promise<AiModelOption> {
-  const override = cleanAiModelOverride(settings.ai.model);
+async function modelFor(settings: StoredSettings, provider: AiKeyProvider, job?: string): Promise<AiModelOption> {
+  // A job pinned to its own model wins over the global selection, which is how
+  // one gateway route can serve a job the default route is not suited to.
+  const pinned = job ? settings.ai.jobModels?.[job as keyof typeof settings.ai.jobModels] : undefined;
+  const override = cleanAiModelOverride(pinned || settings.ai.model);
   if (isLocalAiProvider(provider)) {
     // Do not auto-load a downloaded model or accidentally use a cloud alias.
     const available = await discoverAiModels(settings, { refresh: true });
@@ -325,10 +328,10 @@ export async function runConfiguredAi(
     );
   if (options.webSearch && !aiSupportsWebSearch(provider))
     throw new AiNotConfiguredError(`${AI_PROVIDER_LABELS[provider]} can summarize and rank collected content, but it does not provide live web research. The built-in public-source collectors continue to run.`);
-  const selectedModel = await modelFor(settings, provider);
+  const job = options.job || "curation";
+  const selectedModel = await modelFor(settings, provider, job);
   const model = selectedModel.id;
   const startedAt = Date.now();
-  const job = options.job || "curation";
   try {
     const text = provider === "openai"
       ? await runOpenAi(key, model, options)

@@ -1,11 +1,79 @@
 "use client";
 
-import { useState } from "react";
-import { CircleAlert, ExternalLink, RefreshCw } from "lucide-react";
+import { useCallback, useState } from "react";
+import { CircleAlert, ExternalLink, Play, Plus, RefreshCw } from "lucide-react";
 import type { PipelineSnapshot } from "@/lib/types";
 import styles from "./pipeline-view.module.css";
 
 type View = "overview" | "editions" | "checks" | "sources" | "routes";
+
+type CommandResult = {
+  label: string;
+  ok: boolean;
+  exitCode: number | null;
+  durationMs: number;
+  stdout: string;
+  stderr: string;
+  error?: string;
+};
+
+const RUNNABLE: { id: string; label: string }[] = [
+  { id: "preflight", label: "Check routes" },
+  { id: "collect-hn", label: "Collect HN" },
+  { id: "collect-producthunt", label: "Collect PH" },
+  { id: "collect-github", label: "Collect GitHub" },
+  { id: "collect-feeds", label: "Collect feeds" },
+  { id: "backup", label: "Back up state" },
+  { id: "backup-offsite", label: "Ship off-host" },
+];
+
+function useCommand(onDone: () => void) {
+  const [running, setRunning] = useState("");
+  const [result, setResult] = useState<CommandResult | null>(null);
+  const run = useCallback(async (action: string, payload?: unknown) => {
+    setRunning(action);
+    setResult(null);
+    try {
+      const response = await fetch("/api/pipeline/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, payload }),
+      });
+      const body = await response.json() as CommandResult & { error?: string };
+      setResult(body);
+      if (body.ok) onDone();
+      return body;
+    } catch (error) {
+      const failure = {
+        label: action, ok: false, exitCode: null, durationMs: 0, stdout: "", stderr: "",
+        error: error instanceof Error ? error.message : "The command could not be started.",
+      };
+      setResult(failure);
+      return failure;
+    } finally {
+      setRunning("");
+    }
+  }, [onDone]);
+  return { running, result, run, clear: () => setResult(null) };
+}
+
+function CommandResultPanel({ result }: { result: CommandResult | null }) {
+  if (!result) return null;
+  const detail = (result.stderr || result.stdout || result.error || "").trim();
+  return (
+    <div className={styles.result}>
+      <div className={styles.rowHead}>
+        <b>{result.label}</b>
+        <State state={result.ok ? "ok" : "failed"} />
+      </div>
+      <small>
+        {result.exitCode === null ? "did not start" : `exit ${result.exitCode}`}
+        {result.durationMs ? ` · ${(result.durationMs / 1000).toFixed(1)}s` : ""}
+      </small>
+      {detail ? <pre>{detail.slice(0, 4000)}</pre> : null}
+    </div>
+  );
+}
 
 const VIEWS: { id: View; label: string }[] = [
   { id: "overview", label: "Overview" },
@@ -86,6 +154,10 @@ export function PipelineView({
   onSetup: () => void;
 }) {
   const [view, setView] = useState<View>("overview");
+  const { running, result, run: runAction } = useCommand(onRefresh);
+  const [sourceKind, setSourceKind] = useState("x");
+  const [sourceValue, setSourceValue] = useState("");
+  const [sourceTopics, setSourceTopics] = useState("");
 
   if (!snapshot?.configured)
     return (
@@ -170,6 +242,26 @@ export function PipelineView({
 
       {view === "overview" && (
         <div className={styles.rows}>
+          <div className={styles.row}>
+            <div className={styles.rowHead}><b>Run a step</b><span className={styles.mono}>read-only except backups</span></div>
+            <p>
+              Each runs the pipeline&apos;s own script in its directory and reports what it
+              printed. Nothing here publishes an edition.
+            </p>
+            <div className={styles.actions}>
+              {RUNNABLE.map((action) => (
+                <button
+                  key={action.id}
+                  className="button button-outline"
+                  disabled={Boolean(running)}
+                  onClick={() => runAction(action.id)}
+                >
+                  <Play size={13} /> {running === action.id ? "Running…" : action.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <CommandResultPanel result={result} />
           {run ? (
             <div className={styles.row}>
               <div className={styles.rowHead}>
@@ -263,6 +355,57 @@ export function PipelineView({
 
       {view === "sources" && (
         <div className={styles.rows}>
+          <div className={styles.row}>
+            <div className={styles.rowHead}><b>Add a source</b><span className={styles.mono}>{radar ? `${radar.enabled} enabled` : ""}</span></div>
+            <p>
+              Written by the pipeline&apos;s own format-preserving writer, which backs up the
+              watchlist first and refuses a duplicate. Removing a source stays a commit, so the
+              history of what changed stays in git.
+            </p>
+            <div className={styles.addForm}>
+              <label>
+                Type
+                <select value={sourceKind} onChange={(event) => setSourceKind(event.target.value)}>
+                  <option value="x">X account</option>
+                  <option value="youtube">YouTube channel</option>
+                  <option value="rss">RSS / Atom feed</option>
+                </select>
+              </label>
+              <label>
+                {sourceKind === "x" ? "Handle" : sourceKind === "youtube" ? "Channel id (UC…)" : "Feed URL"}
+                <input
+                  value={sourceValue}
+                  placeholder={sourceKind === "x" ? "@handle" : sourceKind === "youtube" ? "UCxxxxxxxx" : "https://example.com/feed.xml"}
+                  onChange={(event) => setSourceValue(event.target.value)}
+                />
+              </label>
+              <button
+                className="button button-primary"
+                disabled={Boolean(running) || !sourceValue.trim()}
+                onClick={async () => {
+                  const outcome = await runAction("sources-add", {
+                    kind: sourceKind,
+                    value: sourceValue.trim(),
+                    topics: sourceTopics.split(",").map((topic) => topic.trim()).filter(Boolean),
+                  });
+                  if (outcome.ok) { setSourceValue(""); setSourceTopics(""); }
+                }}
+              >
+                <Plus size={13} /> {running === "sources-add" ? "Adding…" : "Add"}
+              </button>
+            </div>
+            <label className={styles.mono} style={{ display: "grid", gap: 4 }}>
+              Topics <span className={styles.empty}>comma separated, optional</span>
+              <input
+                className={styles.mono}
+                value={sourceTopics}
+                placeholder="claude, agentic-coding"
+                onChange={(event) => setSourceTopics(event.target.value)}
+                style={{ border: "1px solid var(--line)", borderRadius: 8, padding: "8px 10px", background: "var(--paper)", color: "var(--ink)" }}
+              />
+            </label>
+          </div>
+          <CommandResultPanel result={result} />
           {sources.length ? sources.map((source) => (
             <div key={`${source.category}-${source.name}`} className={styles.row}>
               <div className={styles.rowHead}>

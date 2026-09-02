@@ -12,13 +12,13 @@ import {
 } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { AI_JOBS } from "@/lib/types";
 import type {
   AiKeyProvider,
   LocalAiProvider,
   AudienceAccountInput,
   PublicSettings,
-  SettingsUpdate,
-} from "@/lib/types";
+  SettingsUpdate, AiJob } from "@/lib/types";
 import {
   GOOGLE_OAUTH_CLIENT_ID_ERROR,
   isGoogleOAuthClientId,
@@ -60,6 +60,7 @@ export type StoredSettings = {
     apiKeys: Record<AiKeyProvider, string>;
     localBaseUrls: Record<LocalAiProvider, string>;
     gatewayBaseUrl: string;
+    jobModels: Partial<Record<AiJob, string>>;
   };
   dailyBrief: PublicSettings["dailyBrief"];
   pipeline: PublicSettings["pipeline"];
@@ -98,6 +99,7 @@ const defaults: StoredSettings = {
     apiKeys: { openai: "", anthropic: "", gemini: "", xai: "", gateway: "", lmstudio: "", ollama: "" },
     localBaseUrls: { ...DEFAULT_LOCAL_AI_URLS },
     gatewayBaseUrl: DEFAULT_GATEWAY_URL,
+    jobModels: {},
   },
   dailyBrief: { sourceLabels: [], lookbackDays: 7, sections: defaultBriefSections },
   pipeline: { root: "", publicUrl: "" },
@@ -188,6 +190,7 @@ export async function readSettings(): Promise<StoredSettings> {
         apiKeys: { ...defaults.ai.apiKeys, ...parsed.ai?.apiKeys },
         localBaseUrls: { ...DEFAULT_LOCAL_AI_URLS, ...parsed.ai?.localBaseUrls },
         gatewayBaseUrl: typeof parsed.ai?.gatewayBaseUrl === "string" ? parsed.ai.gatewayBaseUrl : DEFAULT_GATEWAY_URL,
+        jobModels: cleanJobModels(parsed.ai?.jobModels),
       },
       dailyBrief: { ...defaults.dailyBrief, ...parsed.dailyBrief, sections: normalizeBriefSections(parsed.dailyBrief?.sections) },
     };
@@ -256,6 +259,7 @@ export function toPublicSettings(settings: StoredSettings): PublicSettings {
       model: settings.ai.model,
       localBaseUrls: { ...DEFAULT_LOCAL_AI_URLS, ...settings.ai.localBaseUrls },
       gatewayBaseUrl: settings.ai.gatewayBaseUrl || aiEnvironmentGatewayUrl(process.env),
+      jobModels: settings.ai.jobModels,
       keySet: {
         openai: Boolean(configuredAiApiKey(settings, "openai")),
         anthropic: Boolean(configuredAiApiKey(settings, "anthropic")),
@@ -357,6 +361,22 @@ export function cleanPipelinePublicUrl(value: unknown) {
   if (!["http:", "https:"].includes(url.protocol) || url.username || url.password)
     throw new Error("The published site address must be an http:// or https:// URL with no credentials.");
   return url.origin;
+}
+
+/**
+ * Keep only known jobs with a usable model id. An unrecognised job or a
+ * malformed id is dropped rather than stored, so a stale entry cannot quietly
+ * pin a job to something that no longer exists.
+ */
+export function cleanJobModels(value: unknown): Partial<Record<AiJob, string>> {
+  const source = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  const cleaned: Partial<Record<AiJob, string>> = {};
+  for (const job of AI_JOBS) {
+    const model = source[job];
+    if (typeof model === "string" && model.trim() && isValidAiModelId(model.trim()))
+      cleaned[job] = model.trim();
+  }
+  return cleaned;
 }
 
 export async function updateSettings(update: SettingsUpdate) {
@@ -514,6 +534,7 @@ export async function updateSettings(update: SettingsUpdate) {
         // Validated only when a value is present, so selecting another provider
         // never forces the operator to supply a gateway address.
         gatewayBaseUrl: nextGatewayBaseUrl,
+        jobModels: cleanJobModels(update.ai?.jobModels ?? current.ai.jobModels),
       },
       pipeline: {
         root: cleanPipelineRoot(update.pipeline?.root ?? current.pipeline.root),

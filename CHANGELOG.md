@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- The Pipeline view can now run pipeline steps and add watchlist sources. Steps come from a fixed table of named actions, so a request selects one rather than describing a command; nothing runs through a shell, and the only variable input any action takes is a JSON payload on stdin. Sources are written by the pipeline's own format-preserving writer, which backs up the watchlist first and refuses duplicates.
+- Added per-job model selection. Industry ranking, mention research and summaries, and the three newsletter stages can each be pinned to their own model or gateway route; anything left on Default follows the global selection.
+
 - Added local model-usage accounting. Every background AI call now records its job, provider, model, outcome, and latency, so a provider that quietly stopped answering is visible instead of looking like a quiet day in the results. The last seven days appear in the Pipeline view, grouped by job; history is kept for thirty days. Recording is best-effort and never fails a curation run.
 
 - Added a Pipeline view: a read-only operator surface over a publication pipeline running on this machine. It shows whether today's edition published, which publication checks passed, per-source health with the reason each source was quarantined, scheduler attempts with exit codes, the model routes a preflight found healthy, and per-route model usage including calls that failed over. Reads are confined to the configured directory, and a symbolic link pointing out of it is refused rather than followed.

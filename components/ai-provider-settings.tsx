@@ -2,13 +2,31 @@
 
 import { useEffect, useId, useState } from "react";
 import { Cpu, Globe2, KeyRound, Network, RefreshCw, ShieldCheck, Sparkles, Trash2 } from "lucide-react";
-import type { AiKeyProvider, AiModelsResponse, AiProvider, PublicSettings, SettingsUpdate } from "@/lib/types";
+import { AI_JOBS, type AiJob, type AiKeyProvider, type AiModelsResponse, type AiProvider, type PublicSettings, type SettingsUpdate } from "@/lib/types";
 import { AI_KEY_PROVIDERS, AI_PROVIDER_LABELS, DEFAULT_AI_MODELS, DEFAULT_LOCAL_AI_URLS, gatewayBaseUrl, isGatewayAiProvider, isLocalAiProvider, localAiBaseUrl } from "@/lib/ai-providers";
 import { modelOverrideAfterProviderChange } from "@/lib/ai-settings";
 import { SettingsInput } from "@/components/settings-input";
 import styles from "./ai-provider-settings.module.css";
 
 export type AiSettingsDraft = NonNullable<SettingsUpdate["ai"]> & Pick<PublicSettings["ai"], "keySet" | "keySource">;
+
+const JOB_LABELS: Record<AiJob, string> = {
+  "industry-rerank": "Industry ranking",
+  "mention-research": "Mention research",
+  "mention-summary": "Mention summaries",
+  "newsletter-extract": "Newsletter extraction",
+  "newsletter-consolidate": "Newsletter deduplication",
+  "newsletter-priority": "Newsletter priority",
+};
+
+const JOB_HINTS: Record<AiJob, string> = {
+  "industry-rerank": "Reorders already-discovered stories.",
+  "mention-research": "Broad public-web discovery, cloud providers only.",
+  "mention-summary": "Explains a verified page and scores its attention priority.",
+  "newsletter-extract": "Pulls real news out of an issue.",
+  "newsletter-consolidate": "Groups repeat coverage into one story.",
+  "newsletter-priority": "Ranks extracted stories.",
+};
 
 export function AiProviderSettings({ value, onChange }: {
   value: AiSettingsDraft;
@@ -134,6 +152,34 @@ export function AiProviderSettings({ value, onChange }: {
       </div>
       {value.model && active.data && !modelAvailable && <p className={styles.error}>The saved model is not available in this list. Choose Default or another available model before running AI tasks.</p>}
     </>}
+
+    {provider !== "none" && <div className="source-editor">
+      <div className="source-editor-head">
+        <b>Per-job model <span className={styles.optional}>Optional</span></b>
+        <span>Leave a job on Default unless it needs its own model.</span>
+      </div>
+      {AI_JOBS.map((job) => (
+        <div className="ai-key-row" key={job}>
+          <div><b>{JOB_LABELS[job]}</b><small>{JOB_HINTS[job]}</small></div>
+          <select
+            aria-label={`Model for ${JOB_LABELS[job]}`}
+            value={value.jobModels?.[job] || ""}
+            onChange={(event) => {
+              const next = { ...(value.jobModels || {}) };
+              if (event.target.value) next[job] = event.target.value;
+              else delete next[job];
+              onChange({ ...value, jobModels: next });
+            }}
+          >
+            <option value="">Default{value.model ? ` · ${value.model}` : defaultModel ? ` · ${defaultModel}` : ""}</option>
+            {value.jobModels?.[job] && !models.some((model) => model.id === value.jobModels?.[job]) && (
+              <option value={value.jobModels[job]} disabled>{value.jobModels[job]} · not in current list</option>
+            )}
+            {models.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}
+          </select>
+        </div>
+      ))}
+    </div>}
 
     <div className={`source-editor ${styles.keys}`}>
       <div className="source-editor-head"><b><KeyRound size={13} /> Cloud provider keys</b><span>Only your selected provider is called.</span></div>

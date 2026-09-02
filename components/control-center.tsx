@@ -141,6 +141,7 @@ const emptySettings: PublicSettings = {
     model: "",
     localBaseUrls: DEFAULT_LOCAL_AI_URLS,
     gatewayBaseUrl: "",
+    jobModels: {},
     keySet: { openai: false, anthropic: false, gemini: false, xai: false, gateway: false, lmstudio: false, ollama: false },
     keySource: { openai: "none", anthropic: "none", gemini: "none", xai: "none", gateway: "none", lmstudio: "none", ollama: "none" },
   },
