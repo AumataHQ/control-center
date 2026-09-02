@@ -1,0 +1,48 @@
+# The newsroom, on TrueNAS.
+#
+# Control Center has no login. Every port here is published on ONE address —
+# ${BIND_ADDRESS}, the host's Tailscale address — because that binding is the
+# access control. Do not change these to 0.0.0.0.
+
+services:
+  minio:
+    image: quay.io/minio/minio:RELEASE.2025-07-23T15-54-02Z
+    container_name: newsroom-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER in .env}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env}
+      MINIO_BROWSER_REDIRECT_URL: http://${BIND_ADDRESS}:9001
+    volumes:
+      - ${NEWSROOM_ROOT}/minio:/data
+    ports:
+      - "${BIND_ADDRESS}:9000:9000"
+      - "${BIND_ADDRESS}:9001:9001"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  control-center:
+    image: ${CONTROL_CENTER_IMAGE:-control-center:local}
+    container_name: newsroom-control-center
+    restart: unless-stopped
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      # The hostnames the API answers on. A request arriving with any other
+      # Host is refused, which is what stops a page you visit from driving your
+      # browser in here. It is not a substitute for the port binding above.
+      CONTROL_CENTER_ALLOWED_HOSTS: ${CONTROL_CENTER_ALLOWED_HOSTS:?set CONTROL_CENTER_ALLOWED_HOSTS in .env}
+      CONTROL_CENTER_DATA_DIR: /data
+    volumes:
+      - ${NEWSROOM_ROOT}/control-center:/data
+      # The pipeline's artifacts, synced from the publication host. Read-only:
+      # the dashboard observes the pipeline, it does not write to it.
+      - ${NEWSROOM_ROOT}/pipeline:/newsroom:ro
+    ports:
+      - "${BIND_ADDRESS}:3000:3000"
