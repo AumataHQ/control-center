@@ -11,10 +11,38 @@ gets there, what protects it, and what to check when it stops working.
 | The public edition | Cloudflare Pages | `signalscribe.ai` |
 | Object storage (backups + the trail) | TrueNAS | `100.121.13.81:9000`, console `:9001` |
 | The mirror | TrueNAS | no port; writes `/mnt/Pool/newsroom/pipeline` |
-| Control Center | TrueNAS | `http://100.121.13.81:3010` |
+| Control Center | TrueNAS | **`https://truenas-scale.tailed205b.ts.net:8010`** (plain `http://100.121.13.81:3010` also works) |
 
 The stack lives in `/mnt/Pool/apps/stacks/newsroom` and its durable state in
 `/mnt/Pool/newsroom`.
+
+## Reaching it
+
+Use the HTTPS address. `https://truenas-scale.tailed205b.ts.net:8010`.
+
+Tailscale Serve terminates TLS with a real certificate for the tailnet name and
+proxies to the app, so the dashboard works from a phone and from any in-app
+browser. That matters more than it sounds: iOS blocks cleartext HTTP in
+embedded web views, and Safari tries HTTPS first, so a plain `http://` link to
+the tailnet IP fails with nothing more useful than "this page couldn't load".
+The port stays reachable over plain HTTP for curl and for scripts.
+
+```bash
+# how it was set up, and how to change or remove it
+ssh truenas 'sudo docker exec ix-tailscale-tailscale-1 tailscale serve status'
+ssh truenas 'sudo docker exec ix-tailscale-tailscale-1 tailscale serve --bg --https=8010 http://100.121.13.81:3010'
+ssh truenas 'sudo docker exec ix-tailscale-tailscale-1 tailscale serve --https=8010 off'
+```
+
+Tailscale runs as a container on this host (`ix-tailscale-tailscale-1`), not on
+the host itself, so there is no `tailscale` binary in the host's PATH — every
+command goes through `docker exec`.
+
+The tailnet name must also be in `CONTROL_CENTER_ALLOWED_HOSTS`, which it is.
+Serve forwards the original `Host` and the real scheme, and Next.js honours
+both, so the same-origin check still rejects a foreign origin, a wrong port, and
+a scheme mismatch. Verified rather than assumed — all three return 403 through
+the proxy.
 
 ## What protects it
 
