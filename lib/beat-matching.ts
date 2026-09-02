@@ -127,6 +127,27 @@ function ownsHost(host: string, domain: string) {
   return !!host && !!wanted && (host === wanted || host.endsWith(`.${wanted}`));
 }
 
+/**
+ * Whether a name is unambiguous enough to stand on its own.
+ *
+ * "Buzz" is an ordinary English word and needs corroboration. "GrokBot" is not
+ * a word anyone writes by accident, and demanding an anchor for it would make
+ * the beat miss the very articles it exists to catch.
+ *
+ * The signals are all about the shape of the written name: more than one word,
+ * an internal capital, a digit, or word parts joined by a hyphen or underscore.
+ * None of them occur in ordinary prose by accident, which is the property that
+ * matters. Length alone is not a signal — "assistant" is long and useless.
+ */
+export function isDistinctivePhrase(phrase: string) {
+  const trimmed = phrase.trim();
+  if (!trimmed) return false;
+  if (tokenize(trimmed).length > 1) return true;
+  if (/\d/.test(trimmed)) return true;
+  if (/[a-z][A-Z]/.test(trimmed)) return true;
+  return /[a-z0-9][-_][a-z0-9]/i.test(trimmed);
+}
+
 function termsOf(beat: BeatDefinition, kind: BeatTermKind) {
   return beat.terms.filter((term) => term.kind === kind).map((term) => term.value).filter(Boolean);
 }
@@ -192,6 +213,13 @@ export function matchBeat(beat: BeatDefinition, subject: BeatSubject): BeatMatch
             beatId: beat.id,
             confidence: "high",
             why: `"${phrase}" near "${corroborating[0]}"`,
+            evidence: excerpt(text, from, to),
+          };
+        if (isDistinctivePhrase(phrase))
+          return {
+            beatId: beat.id,
+            confidence: "high",
+            why: `"${phrase}", which is not a name anything else goes by`,
             evidence: excerpt(text, from, to),
           };
         return {

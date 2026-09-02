@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { findPhrase, matchBeat, matchBeats, stem, tokenize } from "../lib/beat-matching";
+import { findPhrase, isDistinctivePhrase, matchBeat, matchBeats, stem, tokenize } from "../lib/beat-matching";
 import type { BeatDefinition } from "../lib/beat-matching";
 
 const buzz: BeatDefinition = {
@@ -176,4 +176,53 @@ test("beats are returned strongest first", () => {
 
 test("an item with no text and no url matches nothing", () => {
   assert.equal(matchBeat(buzz, {}), null);
+});
+
+test("a distinctive name stands on its own", () => {
+  // "GrokBot" is not a name anything else goes by, so demanding a confirming
+  // term for it would make the beat miss the articles it exists to catch.
+  const grokbot: BeatDefinition = {
+    id: "grokbot",
+    name: "GrokBot",
+    kind: "entity",
+    terms: [{ kind: "phrase", value: "GrokBot" }],
+  };
+  const match = matchBeat(grokbot, {
+    title: "GrokBot ships a scheduling feature",
+    body: "No other context at all.",
+    url: "https://news.example/g",
+  });
+  assert.equal(match?.confidence, "high");
+  assert.match(match?.why ?? "", /not a name anything else goes by/);
+});
+
+test("distinctiveness is about shape, not length", () => {
+  assert.equal(isDistinctivePhrase("GrokBot"), true);
+  assert.equal(isDistinctivePhrase("gpt-5.6-terra"), true);
+  assert.equal(isDistinctivePhrase("Claude Code"), true);
+  assert.equal(isDistinctivePhrase("open-source"), true);
+  // Ordinary words, however long, are exactly the ones that need corroboration.
+  assert.equal(isDistinctivePhrase("Buzz"), false);
+  assert.equal(isDistinctivePhrase("assistant"), false);
+  assert.equal(isDistinctivePhrase("orchestration"), false);
+});
+
+test("a distinctive name is still rejected by a nearby negative", () => {
+  const grokbot: BeatDefinition = {
+    id: "grokbot",
+    name: "GrokBot",
+    kind: "entity",
+    terms: [
+      { kind: "phrase", value: "GrokBot" },
+      { kind: "negative", value: "parody account" },
+    ],
+  };
+  assert.equal(
+    matchBeat(grokbot, {
+      title: "A GrokBot parody account fooled everyone",
+      body: "Not the product.",
+      url: "https://news.example/p",
+    }),
+    null,
+  );
 });
