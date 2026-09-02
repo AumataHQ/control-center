@@ -223,6 +223,8 @@ export type NewsroomCandidate = {
   candidateId: string;
   source: string;
   title: string;
+  /** A short excerpt of the item's body, when the artifact carries one. */
+  summary: string;
   url: string;
   score: number;
   disposition: NewsroomDisposition;

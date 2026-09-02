@@ -22,6 +22,7 @@ type TrailEntry = {
   source?: unknown;
   candidate_id?: unknown;
   title?: unknown;
+  summary?: unknown;
   url?: unknown;
   score?: unknown;
   disposition?: unknown;
@@ -110,6 +111,7 @@ function fromTrail(brief: BriefFile): NewsroomCandidate[] {
       candidateId,
       source: text(entry.source) || "unknown",
       title: text(entry.title),
+      summary: text(entry.summary),
       url: text(entry.url),
       score: number(entry.score),
       disposition: disposition(entry.disposition),
@@ -153,6 +155,7 @@ function reconstruct(brief: BriefFile): NewsroomCandidate[] {
           candidateId: text(entry._sid) || text(entry.id),
           source: text(entry.source) || source,
           title: text(entry.headline),
+          summary: text(entry.dek),
           url: "",
           score: number(entry.score),
           disposition: "selected",
@@ -173,6 +176,7 @@ function reconstruct(brief: BriefFile): NewsroomCandidate[] {
       candidateId: text(entry.candidate_id),
       source: text(entry.source) || "unknown",
       title: text(entry.title),
+      summary: "",
       url: text(entry.url),
       score: number(entry.score),
       disposition: "quarantined",
@@ -191,6 +195,7 @@ function reconstruct(brief: BriefFile): NewsroomCandidate[] {
       candidateId: "",
       source: text(entry.source) || "unknown",
       title: text(entry.sentence),
+      summary: "",
       url: text(entry.url),
       score: number(entry.score),
       disposition: "also_noted",

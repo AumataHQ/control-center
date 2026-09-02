@@ -57,7 +57,7 @@ function newsroomItems(settings: StoredSettings, days: number): ScanItem[] {
         category: "newsroom",
         itemKey: `${day}:${key}`,
         title: candidate.headline || candidate.title,
-        body: "",
+        body: candidate.summary,
         url: candidate.url,
         source: candidate.source,
         day,

@@ -52,6 +52,7 @@ const TRAIL_BRIEF = {
       source: "hn",
       candidate_id: "cand_hn_kept",
       title: "A kept story",
+      summary: "A longer excerpt of the body.",
       url: "https://example.com/kept",
       score: 9,
       disposition: "selected",
@@ -146,6 +147,8 @@ test("a kept candidate carries the primary source it was kept for", async () => 
   assert.deepEqual(kept?.primaryUrls, ["https://vendor.example/announcement"]);
   assert.equal(kept?.headline, "A kept story");
   assert.equal(kept?.mergedCount, 2);
+  // A headline alone is rarely enough to judge an item, here or in a beat match.
+  assert.equal(kept?.summary, "A longer excerpt of the body.");
 });
 
 test("candidates are ordered by score and tallied by source", async () => {

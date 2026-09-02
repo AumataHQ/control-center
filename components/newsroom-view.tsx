@@ -80,6 +80,7 @@ function Candidate({ candidate }: { candidate: NewsroomCandidate }) {
         </div>
       </summary>
       <div className={styles.detail}>
+        {candidate.summary ? <p>{candidate.summary}</p> : null}
         {candidate.disposition === "quarantined" && candidate.reason ? (
           <p>{explain(candidate.reason)}</p>
         ) : null}
