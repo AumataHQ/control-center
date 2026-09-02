@@ -4,6 +4,17 @@ A local-first business dashboard for industry updates, strict brand mentions, ne
 
 Every fresh install starts empty. There are no built-in names, companies, websites, social profiles, API keys, or demo records. Each user tailors the dashboard to their own niche in **Settings**.
 
+> **Status — 2 September 2026: not currently deployed.**
+>
+> This dashboard ran for one day on a TrueNAS host as an operator surface over the
+> SignalScribe publication pipeline. That deployment was removed when the two systems were
+> consolidated: the pipeline, its source registry, and the backup target now live in
+> `signalscribe-desk`, and the operator surface is being reconsidered there rather than
+> here. Nothing in this repository is running.
+>
+> The code still builds and passes its gate, and the Newsroom and Beats sections below
+> describe working features. Treat them as the design record for that work.
+
 ## Install and open
 
 Requirements: [Node.js 24.19 or newer](https://nodejs.org/en/download), npm, and a modern desktop browser.
@@ -172,10 +183,17 @@ code, which model routes a preflight found healthy, and what the day's model cal
 per route — including calls that failed over, which a published edition cannot show
 because it records only the model that finally answered.
 
-It is strictly an observer. It does not run the pipeline, publish anything, or edit the
-watchlist: editing sources stays with the pipeline's own format-preserving writer so its
-commit trail remains the record of what changed. The watchlist and ranking profile are
-summarized rather than parsed, so no configuration is ever rewritten from a guess.
+It reads by default and acts only when asked. Steps come from a fixed table of named
+actions rather than a described command, so nothing reaches a shell and the only variable
+input an action takes is a JSON payload on stdin. Sources are added through the pipeline's
+own format-preserving writer, which backs up the watchlist first and refuses duplicates,
+so its commit trail remains the record of what changed. Nothing here publishes, and the
+watchlist and ranking profile are summarized rather than parsed, so no configuration is
+ever rewritten from a guess.
+
+Those actions need the pipeline's `scripts/` directory and a Python interpreter beside the
+dashboard. Pointed at a directory holding only artifacts — a mirror, or a copy on another
+machine — every action reports that the script is absent rather than appearing to run.
 
 Reads are confined to the configured directory. Traversal is refused, files are size
 capped, and a symbolic link pointing out of the directory is refused rather than
@@ -184,6 +202,38 @@ followed. A missing or unreadable directory is reported rather than failing the 
 The same view also shows this dashboard's own model calls for the last seven days,
 grouped by job, since curation and newsletter extraction run here rather than in the
 pipeline.
+
+## Newsroom
+
+Behind a published edition sits far more work than the page shows: items collected and
+rejected, the score each was given, links fetched and links that failed. The Newsroom tab
+reads the trail the pipeline records on every run — published or not — and shows every
+candidate it considered, whether the story was published, withheld, or simply outranked,
+and for a withheld candidate the exact fetches that failed on its behalf.
+
+Editions assembled before that trail existed are reconstructed from what their artifact
+does hold and are labelled incomplete, rather than being presented as the whole picture.
+Those older quarantine records name only a candidate id, so they carry no link and their
+fetches cannot be shown.
+
+## Beats
+
+Standing coverage of a product or a subject, until you retire it. A beat matches against
+everything the newsroom holds, including the candidates that never reached the page.
+
+Beats come in two kinds because the problem is two problems. A **named thing** — a product
+or company — is usually an ordinary word that will match constantly on nothing relevant, so
+a name alone is not treated as evidence: it needs an owned domain or a confirming term
+near it, and without one the match is recorded at low confidence and says so. A name that
+could not be anything else, judged by its written shape rather than its length, stands on
+its own. A **theme** has no literal string that finds it reliably, so it matches a
+vocabulary: one of its phrases, or any two of its confirming terms. Phrases match as word
+sequences with conservative suffix tolerance, so "multi-agent orchestration" also finds
+"multi agent orchestrations".
+
+A beat report is its unreported matches, so a quiet beat produces nothing and re-scanning
+never resurfaces something already read. Retiring a beat stops it collecting but keeps
+everything it found, because the record it built is the point.
 
 ## Local data and privacy
 

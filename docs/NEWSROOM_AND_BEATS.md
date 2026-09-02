@@ -143,7 +143,8 @@ Decisions taken, then built. The plan above is the reasoning; this is the state.
 **Control Center moved to TrueNAS.** It answers on the tailnet address only
 (`http://100.121.13.81:3010`), with the loopback guard replaced by a bind
 address and a host allowlist that do different jobs — see
-[TRUENAS.md](./TRUENAS.md), which is explicit about which one is the boundary.
+the README's Local data and privacy section, which is explicit about which one is the
+boundary.
 The LAN address refuses; verified.
 
 **The backup lives on TrueNAS and R2 is disconnected.** MinIO in the same stack;
@@ -195,3 +196,40 @@ there is evidence of what the beats actually miss.
 
 **The knowledge base is still dead-ended.** Findings cannot reach the page, and
 joining the two halves remains the separate project this plan said it was.
+
+---
+
+## Closing note — 2 September 2026, evening
+
+The platform this plan describes was retired the same day it was built.
+
+The reason was not that any of it failed. Everything above shipped and worked: the newsroom
+read 22 days of real trail, the beats found 15 matches across four subjects, and the
+backup restored byte-for-byte. What failed was the premise. Asked why the dashboard's
+source panels were empty, the honest answer turned out to be that the two systems shared a
+read-only file mirror and a model gateway and nothing else — Control Center's four
+collectors read a settings file only its own UI writes, while the pipeline's eighty
+sources live in a YAML registry this app deliberately refuses to parse and counts with
+three regular expressions. The overlap between the two source models was six web pages out
+of eighty, and that overlap was also the one place the collector code was duplicated.
+
+Reading it as a merge was the mistake. It was an observability surface with a second,
+empty collector stack beside it, and moving it onto a NAS made it a better reader and a
+worse controller in the same move — a read-only mirror cannot be written to by any amount
+of code.
+
+**What survived, in the pipeline's repository:** the editorial trail recorded on every run,
+published or not; the correlating field that makes a withheld candidate joinable to the
+fetch that failed; the site-discovery cascade, which found a real bug in the original while
+being ported; six registered sources; and a verified off-host backup.
+
+**What survives here, as a record rather than a running thing:** the newsroom reader, the
+beat matcher and its store, and the three views. The beat design in particular is worth
+keeping — the two-kinds distinction, the evidence rules, and the unreported-matches model
+were validated against real data before the platform was retired, and rebuilding them
+elsewhere should start from that rather than from scratch.
+
+**What was never built:** beats reaching the page. That gap was always an editorial
+question — how much a beat is worth against a normal score — rather than a technical one,
+and it still is.
+
